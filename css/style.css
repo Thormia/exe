@@ -696,3 +696,10 @@ a.notice:hover { text-decoration: none; filter: brightness(.98); }
 .hero2 > *, .duo > *, .map-wrap > *, .featured > *, .slides > *, .inline-ads > * { min-width: 0; }
 .slide h1, .slide h2, .slide .lead { max-width: 100%; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .feat-big { grid-column: 1 / -1; } .hero-stats { gap: 12px; } .hero-stats div { min-width: 40%; } }
+
+/* Google Maps nhúng */
+.map-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.map-tabs { align-self: flex-start; }
+.map-tabs span { padding: 6px 12px; white-space: nowrap; }
+.gmap { display: block; width: 100%; border: 0; }
+.rev-item { color: var(--primary-600); background: var(--primary-50); border-radius: 6px; padding: 2px 8px; align-self: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

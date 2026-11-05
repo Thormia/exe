@@ -138,14 +138,14 @@ window.MOCK = (function () {
 
   const reviews = [
     { id: 'r1', from: 'u2', to: 'u1', listingId: 'l12', stars: 5, text: 'Bạn nhiệt tình, hàng đúng mô tả, hẹn đúng giờ.', createdAt: now - 10 * D },
-    { id: 'r2', from: 'u3', to: 'u2', listingId: null, stars: 5, text: 'Giao tận KTX, rất tiện.', createdAt: now - 30 * D },
-    { id: 'r3', from: 'u1', to: 'u2', listingId: null, stars: 4, text: 'Hàng ổn, hơi trễ hẹn 10 phút.', createdAt: now - 50 * D },
-    { id: 'r4', from: 'u10', to: 'u5', listingId: null, stars: 5, text: 'Chị bán rẻ lại còn tặng thêm đồ.', createdAt: now - 20 * D },
-    { id: 'r5', from: 'u1', to: 'u5', listingId: null, stars: 5, text: 'Đồ sạch sẽ, đúng như ảnh.', createdAt: now - 40 * D },
-    { id: 'r6', from: 'u7', to: 'u6', listingId: null, stars: 4, text: 'Uy tín.', createdAt: now - 25 * D },
-    { id: 'r7', from: 'u9', to: 'u7', listingId: null, stars: 5, text: 'Sách đẹp, giá tốt.', createdAt: now - 15 * D },
-    { id: 'r8', from: 'u6', to: 'u9', listingId: null, stars: 5, text: 'Nhiệt tình, cho xem kỹ trước khi mua.', createdAt: now - 60 * D },
-    { id: 'r9', from: 'u2', to: 'u10', listingId: null, stars: 4, text: 'OK.', createdAt: now - 12 * D },
+    { id: 'r2', item: 'Nồi lẩu điện mini', from: 'u3', to: 'u2', listingId: null, stars: 5, text: 'Giao tận KTX, rất tiện.', createdAt: now - 30 * D },
+    { id: 'r3', item: 'Giá phơi đồ inox', from: 'u1', to: 'u2', listingId: null, stars: 4, text: 'Hàng ổn, hơi trễ hẹn 10 phút.', createdAt: now - 50 * D },
+    { id: 'r4', item: 'Bàn gấp + đèn học', from: 'u10', to: 'u5', listingId: null, stars: 5, text: 'Chị bán rẻ lại còn tặng thêm đồ.', createdAt: now - 20 * D },
+    { id: 'r5', item: 'Tủ vải 2 buồng', from: 'u1', to: 'u5', listingId: null, stars: 5, text: 'Đồ sạch sẽ, đúng như ảnh.', createdAt: now - 40 * D },
+    { id: 'r6', item: 'Xe đạp mini Nhật', from: 'u7', to: 'u6', listingId: null, stars: 4, text: 'Uy tín.', createdAt: now - 25 * D },
+    { id: 'r7', item: 'Giáo trình Triết học Mác–Lênin', from: 'u9', to: 'u7', listingId: null, stars: 5, text: 'Sách đẹp, giá tốt.', createdAt: now - 15 * D },
+    { id: 'r8', item: 'Bàn phím Logitech K120', from: 'u6', to: 'u9', listingId: null, stars: 5, text: 'Nhiệt tình, cho xem kỹ trước khi mua.', createdAt: now - 60 * D },
+    { id: 'r9', item: 'Mũ bảo hiểm 3/4', from: 'u2', to: 'u10', listingId: null, stars: 4, text: 'OK.', createdAt: now - 12 * D },
   ];
 
   const conversations = [
@@ -183,10 +183,10 @@ window.MOCK = (function () {
     { id: 'n2', to: 'u1', kind: 'deal', text: 'Trần Quốc Huy đã xác nhận giữ “Ghế xoay văn phòng lưới” cho bạn.', link: '#/chat/c1', at: now - 30 * 60 * 1000, read: false },
     { id: 'n3', to: 'u1', kind: 'system', text: 'Tin “Giáo trình Toán rời rạc” đang được nhiều người xem. Đẩy tin chỉ 5.000đ/lượt để lên đầu mục Mới đăng.', link: '#/item/l4', at: now - 5 * H, read: false },
     { id: 'n4', to: 'u1', kind: 'review', text: 'Trần Quốc Huy đã đánh giá bạn 5★: “Bạn nhiệt tình, hàng đúng mô tả, hẹn đúng giờ.”', link: '#/reviews?tab=received', at: now - 10 * D, read: true },
-    { id: 'n5', to: 'u1', kind: 'system', text: 'Chào mừng bạn đến Chợ Trọ! Mỗi tháng bạn có 2 tin đăng miễn phí.', link: '#/pricing', at: now - 120 * D, read: true },
+    { id: 'n5', to: 'u1', kind: 'system', text: 'Chào mừng bạn đến ReMarket! Mỗi tháng bạn có 2 tin đăng miễn phí.', link: '#/pricing', at: now - 120 * D, read: true },
   ];
   users.forEach(u => {
-    if (u.id !== 'u1') notifications.push({ id: 'nw' + u.id, to: u.id, kind: 'system', text: 'Chào mừng bạn đến Chợ Trọ! Mỗi tháng bạn có 2 tin đăng miễn phí.', link: '#/pricing', at: u.joinedAt, read: false });
+    if (u.id !== 'u1') notifications.push({ id: 'nw' + u.id, to: u.id, kind: 'system', text: 'Chào mừng bạn đến ReMarket! Mỗi tháng bạn có 2 tin đăng miễn phí.', link: '#/pricing', at: u.joinedAt, read: false });
   });
 
   const payments = [

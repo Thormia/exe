@@ -4,8 +4,8 @@
  * các hàm bằng lời gọi fetch() tới REST API tương ứng (ghi chú ở mỗi hàm).
  */
 window.api = (function () {
-  const DB_KEY = 'chotro_db_v2';
-  const SESSION_KEY = 'chotro_session_v1';
+  const DB_KEY = 'remarket_db_v3';
+  const SESSION_KEY = 'remarket_session_v1';
   const H = 3600 * 1000;
   const D = 24 * H;
 
@@ -106,7 +106,7 @@ window.api = (function () {
       verified: { student: false, phone: false }, joinedAt: Date.now(), bio: '',
     };
     db.users.push(u);
-    notify(u.id, 'system', `Chào mừng bạn đến Chợ Trọ! Mỗi tháng bạn có ${ref.pricing.freePosts} tin đăng miễn phí.`, '#/pricing');
+    notify(u.id, 'system', `Chào mừng bạn đến ReMarket! Mỗi tháng bạn có ${ref.pricing.freePosts} tin đăng miễn phí.`, '#/pricing');
     persist();
     localStorage.setItem(SESSION_KEY, u.id);
     return u;

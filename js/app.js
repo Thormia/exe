@@ -127,7 +127,7 @@
     const unreadN = notifs.filter(n => !n.read).length;
     document.getElementById('header').innerHTML = `
       <div class="container header-inner">
-        <a href="#/" class="logo"><span class="logo-mark">♻</span><span>Chợ Trọ</span></a>
+        <a href="#/" class="logo"><span class="logo-mark">♻</span><span>ReMarket</span></a>
         <button class="cluster-pill" id="clusterBtn" title="Đổi cụm giao dịch">📍 ${esc(cl.name)} <span class="caret">▾</span></button>
         <form class="search" id="headerSearch">
           <input name="q" placeholder="Tìm bàn học, nồi cơm, giáo trình..." value="${esc(currentQuery().q || '')}" autocomplete="off">
@@ -313,6 +313,8 @@
     let h = 7; for (const ch of String(l.id)) h = (h * 131 + ch.charCodeAt(0)) % 1000003;
     return [a.lat + ((h % 97) / 97 - 0.5) * 0.004, a.lng + ((Math.floor(h / 97) % 89) / 89 - 0.5) * 0.004];
   }
+  const gMapsEmbed = (q, z) => `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=${z || 14}&hl=vi&output=embed`;
+  const gMapsLink = q => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
   function mountMap(el, clusterId, listings, opts) {
     if (!el) return null;
     if (!window.L) { el.innerHTML = '<div class="map-fallback">🗺 Không tải được bản đồ – kiểm tra kết nối Internet.</div>'; return null; }
@@ -421,10 +423,18 @@
       <section class="section">
         <div class="section-head"><h2>🗺 Bản đồ đồ cũ khu ${esc(cl.name)}</h2><span class="small muted">${esc(cl.address || '')}</span></div>
         <div class="map-wrap">
-          <div id="homeMap" class="map"></div>
+          <div class="map-main">
+            <div class="seg map-tabs">
+              <label><input type="radio" name="mapTab" value="list" checked><span>📍 Tin đăng trên bản đồ</span></label>
+              <label><input type="radio" name="mapTab" value="google"><span>🌏 Google Maps</span></label>
+            </div>
+            <div id="homeMap" class="map"></div>
+            <iframe id="gMap" class="map gmap" hidden title="Google Maps khu ${esc(cl.name)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+          </div>
           <aside class="map-side">
             <b>Khu trọ / KTX</b>
             ${cl.areas.map(a => `<button class="area-row" data-area="${a.id}"><span>📍 ${esc(a.name)}</span><span class="count">${byArea[a.id] || 0} tin</span></button>`).join('')}
+            <a id="gMapLink" class="btn ghost block small" href="${gMapsLink(cl.address || cl.name)}" target="_blank" rel="noopener">Mở trong Google Maps ↗</a>
             <p class="small muted">Vị trí trên bản đồ là gần đúng theo khu vực, không phải địa chỉ chính xác của người bán.</p>
           </aside>
         </div>
@@ -436,11 +446,14 @@
       </section>` : ''}
 
       ${recent.length ? `<section class="section">
-        <div class="section-head"><h2>⭐ Đánh giá gần đây</h2><a href="#/reviews">Đánh giá của bạn →</a></div>
+        <div class="section-head"><h2>⭐ Đánh giá người bán gần đây</h2><a href="#/reviews">Đánh giá của bạn →</a></div>
+        <p class="muted small sub">Người mua và người bán chấm điểm nhau sau mỗi giao dịch – xem ai uy tín trước khi hẹn gặp.</p>
         <div class="rev-strip">${recent.map(r => {
           const a = api.getUser(r.from), b = api.getUser(r.to);
+          const item = reviewItem(r);
           return `<a href="#/user/${b.id}" class="rev-card"><div class="rev-top">${avatar(a, 'sm')}<span class="small"><b>${esc(a.name)}</b> → ${esc(b.name)}</span></div>
-            <span class="stars">${'★'.repeat(r.stars)}<span class="off">${'★'.repeat(5 - r.stars)}</span></span><p>“${esc(r.text)}”</p><span class="small muted">${timeAgo(r.createdAt)}</span></a>`;
+            <span class="stars">${'★'.repeat(r.stars)}<span class="off">${'★'.repeat(5 - r.stars)}</span></span><p>“${esc(r.text)}”</p>
+            ${item ? `<span class="rev-item small">🛍 Giao dịch: ${esc(item)}</span>` : ''}<span class="small muted">${timeAgo(r.createdAt)}</span></a>`;
         }).join('')}</div>
       </section>` : ''}
 
@@ -486,12 +499,30 @@
     bindBuy($app);
 
     const cid = api.activeClusterId();
+    const cl = R.cluster(cid);
     const map = mountMap(document.getElementById('homeMap'), cid, api.searchListings({}));
+    // Google Maps nhúng (iframe, không cần API key) — chỉ tải khi mở tab
+    const gMap = document.getElementById('gMap');
+    const gLink = document.getElementById('gMapLink');
+    let gQuery = { q: cl.address || cl.name, z: 14 };
+    const setG = (q, z) => {
+      gQuery = { q, z };
+      gLink.href = gMapsLink(q);
+      if (!gMap.hidden) gMap.src = gMapsEmbed(q, z);
+    };
+    document.querySelectorAll('input[name=mapTab]').forEach(r => r.onchange = () => {
+      const google = r.value === 'google' && r.checked;
+      gMap.hidden = !google;
+      document.getElementById('homeMap').hidden = google;
+      if (google) gMap.src = gMapsEmbed(gQuery.q, gQuery.z);
+      else if (map) map.invalidateSize();
+    });
     document.querySelectorAll('.area-row').forEach(b => b.onclick = () => {
       document.querySelectorAll('.area-row').forEach(x => x.classList.toggle('sel', x === b));
       const a = R.area(cid, b.dataset.area);
+      setG(`${a.lat},${a.lng}`, 16);
       if (map) map.flyTo([a.lat, a.lng], 16);
-      else go('/search' + qs({ area: a.id }));
+      else if (gMap.hidden) go('/search' + qs({ area: a.id }));
     });
   }
 
@@ -820,7 +851,7 @@
 
           <div class="panel">
             <h3>🗺 Khu vực giao dịch</h3>
-            <p class="small muted">📍 ${esc(areaName(l.cluster, l.area))}, ${esc(R.cluster(l.cluster).address || R.cluster(l.cluster).name)} · Vị trí gần đúng – hãy hẹn gặp ở nơi công cộng.</p>
+            <p class="small muted">📍 ${esc(areaName(l.cluster, l.area))}, ${esc(R.cluster(l.cluster).address || R.cluster(l.cluster).name)} · Vị trí gần đúng – hãy hẹn gặp ở nơi công cộng. <a href="${gMapsLink((R.area(l.cluster, l.area) || {}).lat + ',' + (R.area(l.cluster, l.area) || {}).lng)}" target="_blank" rel="noopener">Xem trên Google Maps ↗</a></p>
             <div id="itemMap" class="map sm"></div>
           </div>
 
@@ -1220,7 +1251,7 @@
       <section class="section two-col">
         <div class="panel">
           <h3>🙋 Dịch vụ thanh lý phòng trọ</h3>
-          <p class="muted">Không có thời gian? Đội ngũ Chợ Trọ hỗ trợ chụp ảnh, định giá, đăng bán theo combo và tìm người mua giúp bạn.</p>
+          <p class="muted">Không có thời gian? Đội ngũ ReMarket hỗ trợ chụp ảnh, định giá, đăng bán theo combo và tìm người mua giúp bạn.</p>
           <form id="svcForm" class="form">
             <div class="row2">
               <label>Họ tên<input name="name" value="${esc(me ? me.name : '')}" required></label>
@@ -1486,13 +1517,19 @@
     });
   }
 
+  // Tên món đồ của giao dịch được đánh giá
+  function reviewItem(r) {
+    const l = r.listingId ? api.getListing(r.listingId) : null;
+    return l ? l.title : (r.item || '');
+  }
   function reviewList(rs, written) {
     if (!rs.length) return '<div class="empty">Chưa có đánh giá nào.</div>';
     return `<div class="reviews">${rs.map(r => {
       const u = api.getUser(written ? r.to : r.from);
       const l = r.listingId ? api.getListing(r.listingId) : null;
+      const item = !l && r.item ? ` · 🛍 ${esc(r.item)}` : '';
       return `<div class="review">${avatar(u, 'sm')}<div><b>${written ? 'Bạn → ' : ''}${esc(u ? u.name : 'Người dùng')}</b> <span class="stars">${'★'.repeat(r.stars)}<span class="off">${'★'.repeat(5 - r.stars)}</span></span>
-        <div>${esc(r.text || '(Không có nhận xét)')}</div><div class="small muted">${timeAgo(r.createdAt)}${l ? ` · <a href="#/item/${l.id}">${esc(l.title)}</a>` : ''}</div></div></div>`;
+        <div>${esc(r.text || '(Không có nhận xét)')}</div><div class="small muted">${timeAgo(r.createdAt)}${l ? ` · 🛍 <a href="#/item/${l.id}">${esc(l.title)}</a>` : item}</div></div></div>`;
     }).join('')}</div>`;
   }
 

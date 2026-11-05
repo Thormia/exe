@@ -1,4 +1,4 @@
-# Chợ Trọ – Sàn đồ cũ sinh viên Hòa Lạc & Cầu Giấy
+# ReMarket – Sàn đồ cũ sinh viên Hòa Lạc & Cầu Giấy
 
 Frontend bản MVP theo `idea.docx`. Chưa có backend: dữ liệu mẫu nằm trong `js/data.js`, mọi thay đổi được lưu vào `localStorage` của trình duyệt.
 
