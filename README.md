@@ -30,7 +30,15 @@ Mã OTP / mã xác thực demo: `123456`. Link "Khôi phục dữ liệu mẫu" 
 - Cập nhật trạng thái đã giao dịch → hai bên **đánh giá** nhau.
 - Xác thực sinh viên (email .edu.vn hoặc ảnh thẻ) và số điện thoại.
 - **Thanh lý chuyển trọ**: đặt ngày chuyển đi, đăng theo **combo**, dịch vụ thanh lý phòng trọ, đối tác địa phương.
-- **Đẩy tin** (5.000đ/3 ngày, 10.000đ/7 ngày – thanh toán giả lập).
+- **Gói trả phí** (theo `ReMarket - Mô hình tài chính.xlsx`, thanh toán giả lập) – trang `#/pricing`:
+  - 2 tin miễn phí mỗi tháng, mua thêm **5.000đ / 2 tin**
+  - **Đẩy tin** 5.000đ/lượt (lên đầu mục Mới đăng)
+  - **Tin nổi bật** 10.000đ/3 ngày (ô lớn 2×2 trang chủ kèm SĐT người bán, ưu tiên tìm kiếm)
+  - **Gói đối tác cửa hàng** 300.000đ/tháng
+  - **Banner 2 bên** 200.000đ/tuần (giá đề xuất – chưa có trong file tài chính, sửa ở `pricing` trong `js/store.js`)
+- Trang chủ kiểu Chợ Tốt: banner xoay, Gợi ý gần bạn | Mới đăng 2 cột, banner quảng cáo 2 bên (màn hình ≥1540px).
+- **Bản đồ** khu Hòa Lạc (Thạch Hòa, Thạch Thất) / Cầu Giấy bằng Leaflet + OpenStreetMap (cần Internet).
+- **Thông báo** (`#/notifications`, chuông trên header) và trang **Đánh giá** (`#/reviews`).
 
 ## Cấu trúc
 

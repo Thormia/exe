@@ -4,7 +4,7 @@
  * các hàm bằng lời gọi fetch() tới REST API tương ứng (ghi chú ở mỗi hàm).
  */
 window.api = (function () {
-  const DB_KEY = 'chotro_db_v1';
+  const DB_KEY = 'chotro_db_v2';
   const SESSION_KEY = 'chotro_session_v1';
   const H = 3600 * 1000;
   const D = 24 * H;
@@ -18,6 +18,8 @@ window.api = (function () {
       listings: m.listings,
       reviews: m.reviews,
       conversations: m.conversations,
+      notifications: m.notifications,
+      payments: m.payments,
       reports: [],
       serviceRequests: [],
       guestCluster: 'hoalac',
@@ -52,6 +54,18 @@ window.api = (function () {
     categories: window.MOCK.categories,
     conditions: window.MOCK.conditions,
     partners: window.MOCK.partners,
+    /*
+     * Bảng giá theo "ReMarket - Mô hình tài chính.xlsx" (sheet Doanh thu).
+     * Riêng banner 2 bên chưa có trong mô hình — đây là giá đề xuất, sửa tại đây.
+     */
+    pricing: {
+      freePosts: 2,                                  // 2 tin đầu miễn phí mỗi tháng
+      extraPosts: { price: 5000, posts: 2 },          // Phí đăng thêm tin: 5.000đ / 2 tin
+      bump: { price: 5000 },                          // Đẩy tin: 5.000đ / lượt
+      featured: { price: 10000, days: 3 },            // Tin ưu tiên (nổi bật): 10.000đ / 3 ngày
+      partner: { price: 300000, unit: 'tháng' },      // Gói đối tác cửa hàng
+      banner: { price: 200000, unit: 'tuần' },        // Banner 2 bên trang chủ (giá đề xuất)
+    },
     cluster(id) { return this.clusters.find(c => c.id === id); },
     category(id) { return this.categories.find(c => c.id === id); },
     area(clusterId, areaId) {
@@ -92,6 +106,7 @@ window.api = (function () {
       verified: { student: false, phone: false }, joinedAt: Date.now(), bio: '',
     };
     db.users.push(u);
+    notify(u.id, 'system', `Chào mừng bạn đến Chợ Trọ! Mỗi tháng bạn có ${ref.pricing.freePosts} tin đăng miễn phí.`, '#/pricing');
     persist();
     localStorage.setItem(SESSION_KEY, u.id);
     return u;
@@ -141,6 +156,15 @@ window.api = (function () {
   function reviewsFor(userId) {
     return db.reviews.filter(r => r.to === userId).sort((a, b) => b.createdAt - a.createdAt);
   }
+  function reviewsBy(userId) {
+    return db.reviews.filter(r => r.from === userId).sort((a, b) => b.createdAt - a.createdAt);
+  }
+  // Đánh giá mới nhất trong cụm (theo người được đánh giá)
+  function recentReviews(clusterId, n) {
+    return db.reviews
+      .filter(r => { const u = getUser(r.to); return u && u.cluster === clusterId && r.text; })
+      .sort((a, b) => b.createdAt - a.createdAt).slice(0, n || 6);
+  }
   function rating(userId) {
     const rs = reviewsFor(userId);
     if (!rs.length) return { avg: 0, count: 0 };
@@ -162,6 +186,7 @@ window.api = (function () {
     const me = currentUser();
     if (!me) throw new Error('Chưa đăng nhập.');
     db.reviews.push({ id: uid('r'), from: me.id, to: toUserId, listingId, stars, text: text.trim(), createdAt: Date.now() });
+    notify(toUserId, 'review', `${me.name} đã đánh giá bạn ${stars}★${text.trim() ? `: “${text.trim()}”` : '.'}`, '#/reviews?tab=received');
     persist();
   }
 
@@ -176,6 +201,7 @@ window.api = (function () {
   }
 
   function isBoosted(l) { return l.boostUntil && l.boostUntil > Date.now(); }
+  const freshAt = l => Math.max(l.createdAt, l.bumpedAt || 0);  // đẩy tin = làm mới thời gian
 
   function expireReservations() {
     let changed = false;
@@ -221,14 +247,14 @@ window.api = (function () {
       if (me && l.area === me.area) s += 30;
       if (me && l.school === me.school) s += 15;
       s -= l.distance * 5;
-      s -= (Date.now() - l.createdAt) / D * 2;
+      s -= (Date.now() - freshAt(l)) / D * 2;
       if (l.status === 'reserved') s -= 40;
       return s;
     };
     const cmp = {
       priority: (a, b) => score(b) - score(a),
       near: (a, b) => a.distance - b.distance,
-      new: (a, b) => b.createdAt - a.createdAt,
+      new: (a, b) => freshAt(b) - freshAt(a),
       priceAsc: (a, b) => a.price - b.price,
       priceDesc: (a, b) => b.price - a.price,
     }[sort] || ((a, b) => score(b) - score(a));
@@ -271,6 +297,15 @@ window.api = (function () {
     const me = currentUser();
     if (!me) throw new Error('Bạn cần đăng nhập để đăng tin.');
     validate(data);
+    const q = quota();
+    if (!q.freeLeft) {
+      if (!q.credits) {
+        const err = new Error(`Bạn đã dùng hết ${ref.pricing.freePosts} tin miễn phí tháng này. Mua thêm ${ref.pricing.extraPosts.posts} tin chỉ ${ref.pricing.extraPosts.price.toLocaleString('vi-VN')}đ.`);
+        err.code = 'QUOTA';
+        throw err;
+      }
+      me.postCredits -= 1;
+    }
     const l = Object.assign({
       id: uid('l'), seller: me.id, cluster: me.cluster, status: 'available', views: 0,
       createdAt: Date.now(), jitter: Math.random() * 0.4, boostUntil: 0, reservedBy: null,
@@ -312,6 +347,7 @@ window.api = (function () {
     l.reservedBy = me.id;
     l.reservedUntil = Date.now() + (hours || 24) * H;
     l.meetPoint = meetPoint;
+    notify(l.seller, 'deal', `${me.name} đã đặt giữ “${l.title}” – hẹn tại ${meetPoint}.`, '#/item/' + l.id);
     persist();
     const conv = startConversation(id);
     sendMessage(conv.id, `📌 Mình đã đặt giữ "${l.title}". Hẹn gặp tại: ${meetPoint}.`);
@@ -323,6 +359,7 @@ window.api = (function () {
     const me = currentUser();
     const l = raw(id);
     if (!me || (l.reservedBy !== me.id && l.seller !== me.id)) throw new Error('Không có quyền.');
+    notify(me.id === l.seller ? l.reservedBy : l.seller, 'deal', `${me.name} đã hủy giữ chỗ “${l.title}”.`, '#/item/' + l.id);
     l.status = 'available'; l.reservedBy = null; l.reservedUntil = 0; l.meetPoint = '';
     persist();
   }
@@ -335,6 +372,7 @@ window.api = (function () {
     l.soldTo = buyerId || l.reservedBy || null;
     l.soldAt = Date.now();
     l.reservedUntil = 0;
+    if (l.soldTo) notify(l.soldTo, 'review', `Giao dịch “${l.title}” đã hoàn tất. Hãy đánh giá người bán để xây dựng uy tín cộng đồng.`, '#/reviews');
     persist();
   }
 
@@ -345,11 +383,88 @@ window.api = (function () {
     persist();
   }
 
-  // POST /listings/:id/boost  — mock thanh toán
-  function boost(id, days) {
-    const l = raw(id);
-    assertOwner(l);
-    l.boostUntil = Math.max(Date.now(), l.boostUntil || 0) + days * D;
+  // GET /me/quota — số tin miễn phí còn lại trong tháng + lượt đã mua
+  function quota() {
+    const me = currentUser();
+    if (!me) return { used: 0, freeLeft: 0, credits: 0 };
+    const d = new Date();
+    const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    const used = db.listings.filter(l => l.seller === me.id && l.createdAt >= monthStart).length;
+    return { used, freeLeft: Math.max(0, ref.pricing.freePosts - used), credits: me.postCredits || 0 };
+  }
+
+  /*
+   * POST /payments  — thanh toán mô phỏng
+   * kind: 'posts' (mua thêm tin) | 'bump' (đẩy tin) | 'featured' (tin nổi bật) | 'partner' | 'banner'
+   */
+  function pay(kind, opts) {
+    const me = currentUser();
+    if (!me) throw new Error('Bạn cần đăng nhập.');
+    opts = opts || {};
+    const P = ref.pricing;
+    let amount = 0, desc = '', l = null;
+    if (kind === 'posts') {
+      amount = P.extraPosts.price; desc = `Mua thêm ${P.extraPosts.posts} tin đăng`;
+      me.postCredits = (me.postCredits || 0) + P.extraPosts.posts;
+    } else if (kind === 'bump') {
+      l = raw(opts.listingId); assertOwner(l);
+      amount = P.bump.price; desc = 'Đẩy tin lên đầu';
+      l.bumpedAt = Date.now();
+    } else if (kind === 'featured') {
+      l = raw(opts.listingId); assertOwner(l);
+      amount = P.featured.price; desc = `Tin nổi bật ${P.featured.days} ngày`;
+      l.boostUntil = Math.max(Date.now(), l.boostUntil || 0) + P.featured.days * D;
+    } else if (kind === 'partner') {
+      amount = P.partner.price; desc = 'Gói đối tác cửa hàng 1 tháng' + (opts.shop ? ` – ${opts.shop}` : '');
+      db.serviceRequests.push({ id: uid('sr'), type: 'partner', at: Date.now(), by: me.id, shop: opts.shop || '', phone: opts.phone || '' });
+    } else if (kind === 'banner') {
+      const weeks = Number(opts.weeks) || 1;
+      amount = P.banner.price * weeks; desc = `Banner ${opts.side === 'right' ? 'bên phải' : 'bên trái'} ${weeks} tuần` + (opts.shop ? ` – ${opts.shop}` : '');
+      db.serviceRequests.push({ id: uid('sr'), type: 'banner', at: Date.now(), by: me.id, side: opts.side, weeks, shop: opts.shop || '' });
+    } else throw new Error('Gói không hợp lệ.');
+    const p = { id: uid('p'), user: me.id, kind, amount, method: opts.method || 'MoMo', listingId: l ? l.id : null, desc, at: Date.now() };
+    db.payments.push(p);
+    notify(me.id, 'pay', `Thanh toán thành công ${amount.toLocaleString('vi-VN')}đ – ${desc}${l ? ` cho “${l.title}”` : ''}.`, l ? '#/item/' + l.id : '#/me?tab=payments');
+    persist();
+    return p;
+  }
+  function myPayments() {
+    const me = currentUser();
+    return me ? db.payments.filter(p => p.user === me.id).sort((a, b) => b.at - a.at) : [];
+  }
+
+  // Tin nổi bật (đã trả phí) trong cụm
+  function featuredListings(clusterId) {
+    return searchListings({ cluster: clusterId, sort: 'priority' }).filter(l => l.boosted);
+  }
+
+  // ---------- Thông báo ----------
+  // GET /notifications
+  function notify(to, kind, text, link) {
+    if (!to) return;
+    db.notifications = db.notifications || [];
+    db.notifications.push({ id: uid('n'), to, kind, text, link: link || '', at: Date.now(), read: false });
+  }
+  function notifications() {
+    const me = currentUser();
+    if (!me) return [];
+    // Nhắc tin nổi bật sắp hết hạn (< 24 giờ)
+    let changed = false;
+    db.listings.forEach(l => {
+      if (l.seller === me.id && isBoosted(l) && l.boostUntil - Date.now() < D) {
+        const key = 'exp' + l.id + l.boostUntil;
+        if (!db.notifications.some(n => n.key === key)) {
+          db.notifications.push({ id: uid('n'), key, to: me.id, kind: 'system', text: `Tin nổi bật “${l.title}” sắp hết hạn. Gia hạn ${ref.pricing.featured.price.toLocaleString('vi-VN')}đ/${ref.pricing.featured.days} ngày để giữ vị trí.`, link: '#/item/' + l.id, at: Date.now(), read: false });
+          changed = true;
+        }
+      }
+    });
+    if (changed) persist();
+    return db.notifications.filter(n => n.to === me.id).sort((a, b) => b.at - a.at);
+  }
+  function unreadNotifications() { return notifications().filter(n => !n.read).length; }
+  function markNotificationsRead(id) {
+    notifications().forEach(n => { if (!id || n.id === id) n.read = true; });
     persist();
   }
 
@@ -357,6 +472,7 @@ window.api = (function () {
   function report(id, reason, note) {
     const me = currentUser();
     db.reports.push({ id: uid('rp'), listingId: id, by: me ? me.id : null, reason, note, at: Date.now() });
+    if (me) notify(me.id, 'system', `Đã nhận báo cáo “${reason}”. Đội kiểm duyệt sẽ xử lý trong 24 giờ.`, '#/item/' + id);
     persist();
   }
 
@@ -480,9 +596,10 @@ window.api = (function () {
     ref, currentUser, login, loginAs, logout, register, updateProfile,
     verifyStudentEmail, verifyStudentCard, verifyPhone,
     activeClusterId, setActiveCluster,
-    getUser, allUsers, reviewsFor, rating, pendingReviews, addReview,
-    searchListings, getListing, createListing, updateListing, deleteListing,
-    reserve, cancelReservation, markSold, reopen, boost, report, myReservations,
+    getUser, allUsers, reviewsFor, reviewsBy, recentReviews, rating, pendingReviews, addReview,
+    searchListings, getListing, createListing, updateListing, deleteListing, featuredListings,
+    reserve, cancelReservation, markSold, reopen, report, myReservations,
+    quota, pay, myPayments, notifications, unreadNotifications, markNotificationsRead,
     movingSellers, requestService,
     conversations, getConversation, unreadCount, totalUnread, markRead, startConversation, sendMessage, simulateReply,
     resetDemo, stats,
