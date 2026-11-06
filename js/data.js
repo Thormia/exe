@@ -103,37 +103,181 @@ window.MOCK = (function () {
 
   const listings = [
     // --- Hòa Lạc ---
-    L({ title: 'Bàn học gấp gọn gỗ ép 60x40', cat: 'noi-that', price: 120000, condition: 'Tốt', usedTime: '1 năm', seller: 'u2', cluster: 'hoalac', school: 'ĐH FPT', area: 'tan-xa', createdAt: now - 3 * H, desc: 'Bàn gấp chân sắt, mặt gỗ ép chống nước. Có vài vết xước nhỏ, không ảnh hưởng dùng. Qua Tân Xã xem trực tiếp.' }),
-    L({ boostUntil: now + 2 * D, title: 'Nồi cơm điện Sharp 1.8L', cat: 'gia-dung', price: 180000, condition: 'Tốt', usedTime: '2 năm', seller: 'u5', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 6 * H, movingSale: true, desc: 'Nấu vẫn ngon, lòng nồi chống dính còn tốt. Thanh lý vì ra trường.' }),
-    L({ title: 'Combo đồ phòng KTX: quạt + đèn học + kệ sách', cat: 'gia-dung', price: 250000, condition: 'Khá', usedTime: '2–3 năm', seller: 'u5', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 5 * H, movingSale: true, combo: [{ name: 'Quạt đứng Senko', price: 150000 }, { name: 'Đèn học LED kẹp bàn', price: 70000 }, { name: 'Kệ sách 3 tầng', price: 90000 }], boostUntil: now + 2 * D, desc: 'Lấy cả combo rẻ hơn mua lẻ 60k. Mình để ở phòng, bạn qua KTX xem và mang về luôn.' }),
-    L({ title: 'Giáo trình Toán rời rạc + Xác suất thống kê', cat: 'hoc-tap', price: 50000, condition: 'Khá', usedTime: '1 kỳ', seller: 'u1', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 26 * H, desc: 'Có ghi chú bút chì một số trang, không rách.' }),
-    L({ title: 'Xe đạp Asama mini, phanh mới thay', cat: 'xe-the-thao', price: 650000, condition: 'Tốt', usedTime: '1.5 năm', seller: 'u10', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'ktx-dhqg', createdAt: now - 30 * H, boostUntil: now + 4 * D, desc: 'Xe đi trong khuôn viên, vừa thay má phanh và săm. Tặng kèm khóa.' }),
-    L({ title: 'Tai nghe có dây Sony, đổi lấy chuột không dây', cat: 'dien-tu', type: 'trade', tradeFor: 'Chuột không dây (Logitech hoặc tương đương)', condition: 'Như mới', usedTime: '3 tháng', seller: 'u4', cluster: 'hoalac', school: 'ĐH FPT', area: 'phu-huu', createdAt: now - 10 * H, desc: 'Mua về ít dùng, còn hộp.' }),
-    L({ title: 'Tặng móc treo quần áo (20 cái) và giỏ đựng đồ', cat: 'quan-ao', type: 'free', condition: 'Khá', usedTime: '1 năm', seller: 'u5', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 4 * H, movingSale: true, desc: 'Ai cần qua lấy trước ngày mình chuyển đi nhé.' }),
-    L({ title: 'Ấm siêu tốc Lock&Lock 1.7L', cat: 'gia-dung', price: 90000, condition: 'Tốt', usedTime: '8 tháng', seller: 'u3', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'thach-hoa', createdAt: now - 2 * D, desc: 'Đun nhanh, không rỉ. Đã vệ sinh sạch.' }),
-    L({ title: 'Ghế xoay văn phòng lưới', cat: 'noi-that', price: 350000, condition: 'Khá', usedTime: '2 năm', seller: 'u2', cluster: 'hoalac', school: 'ĐH FPT', area: 'tan-xa', createdAt: now - 3 * D, status: 'reserved', reservedBy: 'u1', reservedUntil: now + 20 * H, meetPoint: 'Chợ Tân Xã', desc: 'Ngồi êm, xoay tốt, tựa lưng hơi lỏng.' }),
-    L({ boostUntil: now + 2 * D, title: 'Sách IELTS Cambridge 14–17 (bản photo đẹp)', cat: 'hoc-tap', price: 80000, condition: 'Tốt', usedTime: '6 tháng', seller: 'u3', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'thach-hoa', createdAt: now - 20 * H, desc: '4 cuốn, chưa viết vào.' }),
-    L({ title: 'Đèn học chống cận Rạng Đông', cat: 'gia-dung', price: 110000, condition: 'Như mới', usedTime: '4 tháng', seller: 'u1', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 8 * D, status: 'reserved', reservedBy: 'u4', reservedUntil: now + 10 * H, meetPoint: 'Sảnh thư viện ĐH FPT', desc: '3 chế độ sáng, cổng USB.' }),
-    L({ title: 'Bàn phím cơ Fuhlen, switch blue', cat: 'dien-tu', price: 280000, condition: 'Tốt', usedTime: '1 năm', seller: 'u1', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 12 * D, status: 'sold', soldTo: 'u2', desc: 'Đủ phím, LED ổn.' }),
-    L({ title: 'Vợt cầu lông Yonex + 3 quả cầu', cat: 'xe-the-thao', price: 150000, condition: 'Khá', usedTime: '1 năm', seller: 'u10', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'ktx-dhqg', createdAt: now - 4 * D, desc: 'Cước còn căng.' }),
-    L({ title: 'Áo khoác đồng phục FPT size L', cat: 'quan-ao', price: 60000, condition: 'Tốt', usedTime: '1 năm', seller: 'u4', cluster: 'hoalac', school: 'ĐH FPT', area: 'phu-huu', createdAt: now - 5 * D, desc: 'Đã giặt sạch, không phai màu.' }),
-    L({ title: 'Kệ giày 4 tầng inox', cat: 'noi-that', type: 'free', condition: 'Đã cũ', usedTime: '3 năm', seller: 'u2', cluster: 'hoalac', school: 'ĐH FPT', area: 'tan-xa', createdAt: now - 7 * H, desc: 'Hơi rỉ chân nhưng vẫn chắc. Cho bạn nào cần, tự qua lấy.' }),
-    L({ title: 'Chăn ga gối đơn 1m2 + nệm topper', cat: 'quan-ao', price: 200000, condition: 'Tốt', usedTime: '1 năm', seller: 'u5', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 5 * H, movingSale: true, desc: 'Đã giặt khô, sạch sẽ, vừa giường KTX.' }),
-    L({ title: 'Máy tính Casio fx-580VN X', cat: 'hoc-tap', type: 'trade', tradeFor: 'Giáo trình Kinh tế vi mô hoặc 100k', price: 0, condition: 'Tốt', usedTime: '2 năm', seller: 'u3', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'thach-hoa', createdAt: now - 36 * H, desc: 'Máy chạy tốt, pin còn khỏe.' }),
-    L({ boostUntil: now + 2 * D, title: 'Hub USB-C 6 in 1 Ugreen', cat: 'dien-tu', price: 220000, condition: 'Như mới', usedTime: '2 tháng', seller: 'u2', cluster: 'hoalac', school: 'ĐH FPT', area: 'tan-xa', createdAt: now - 14 * H, desc: 'Đổi laptop nên không dùng nữa.' }),
+    L({ title: 'Bàn học gấp gọn gỗ ép 60x40',
+      images: [
+    'images/ban-gap-01.png',
+    'images/ban-gap-02.png',
+    'images/ban-gap-03.png',
+    'images/ban-gap-04.png'
+  ], cat: 'noi-that', price: 120000, condition: 'Tốt', usedTime: '1 năm', seller: 'u2', cluster: 'hoalac', school: 'ĐH FPT', area: 'tan-xa', createdAt: now - 3 * H, desc: 'Bàn gấp chân sắt, mặt gỗ ép chống nước. Có vài vết xước nhỏ, không ảnh hưởng dùng. Qua Tân Xã xem trực tiếp.' }),
+    L({ boostUntil: now + 2 * D, title: 'Nồi cơm điện Sharp 1.8L',images: [
+    'images/noi-com-01.png',
+    'images/noi-com-02.png',
+    'images/noi-com-03.png',
+    'images/noi-com-04.png',
+    'images/noi-com-05.png',
+    'images/noi-com-06.png'
+  ], cat: 'gia-dung', price: 180000, condition: 'Tốt', usedTime: '2 năm', seller: 'u5', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 6 * H, movingSale: true, desc: 'Nấu vẫn ngon, lòng nồi chống dính còn tốt. Thanh lý vì ra trường.' }),
+    L({ title: 'Combo đồ phòng KTX: quạt + đèn học + kệ sách',images: [
+    'images/combo-ktx-01.png',
+    'images/combo-ktx-02.png',
+    'images/combo-ktx-03.png',
+    'images/combo-ktx-04.png'
+  ], cat: 'gia-dung', price: 250000, condition: 'Khá', usedTime: '2–3 năm', seller: 'u5', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 5 * H, movingSale: true, combo: [{ name: 'Quạt đứng Senko', price: 150000 }, { name: 'Đèn học LED kẹp bàn', price: 70000 }, { name: 'Kệ sách 3 tầng', price: 90000 }], boostUntil: now + 2 * D, desc: 'Lấy cả combo rẻ hơn mua lẻ 60k. Mình để ở phòng, bạn qua KTX xem và mang về luôn.' }),
+    L({ title: 'Giáo trình Toán rời rạc + Xác suất thống kê', images: [
+    'images/giao-trinh-01.png',
+    'images/giao-trinh-02.png',
+    'images/giao-trinh-03.png',
+    'images/giao-trinh-04.png'
+  ], cat: 'hoc-tap', price: 50000, condition: 'Khá', usedTime: '1 kỳ', seller: 'u1', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 26 * H, desc: 'Có ghi chú bút chì một số trang, không rách.' }),
+    L({ title: 'Xe đạp Asama mini, phanh mới thay',images: [
+    'images/xe-dap-01.png',
+    'images/xe-dap-02.png',
+    'images/xe-dap-03.png',
+    'images/xe-dap-04.png'
+  ], cat: 'xe-the-thao', price: 650000, condition: 'Tốt', usedTime: '1.5 năm', seller: 'u10', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'ktx-dhqg', createdAt: now - 30 * H, boostUntil: now + 4 * D, desc: 'Xe đi trong khuôn viên, vừa thay má phanh và săm. Tặng kèm khóa.' }),
+    L({ title: 'Tai nghe có dây Sony, đổi lấy chuột không dây',images: [
+    'images/tai-nghe-01.png',
+    'images/tai-nghe-02.png',
+    'images/tai-nghe-03.png',
+    'images/tai-nghe-04.png'
+  ], cat: 'dien-tu', type: 'trade', tradeFor: 'Chuột không dây (Logitech hoặc tương đương)', condition: 'Như mới', usedTime: '3 tháng', seller: 'u4', cluster: 'hoalac', school: 'ĐH FPT', area: 'phu-huu', createdAt: now - 10 * H, desc: 'Mua về ít dùng, còn hộp.' }),
+    L({ title: 'Tặng móc treo quần áo (20 cái) và giỏ đựng đồ',images: [
+    'images/moc-va-gio-01.png',
+    'images/moc-va-gio-02.png',
+    'images/moc-va-gio-03.png',
+    'images/moc-va-gio-04.png',
+    'images/moc-va-gio-05.png'
+  ], cat: 'quan-ao', type: 'free', condition: 'Khá', usedTime: '1 năm', seller: 'u5', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 4 * H, movingSale: true, desc: 'Ai cần qua lấy trước ngày mình chuyển đi nhé.' }),
+    L({ title: 'Ấm siêu tốc Lock&Lock 1.7L',images: [
+    'images/am-nuoc-01.png',
+    'images/am-nuoc-02.png',
+    'images/am-nuoc-03.png',
+    'images/am-nuoc-04.png',
+    'images/am-nuoc-05.png'
+  ], cat: 'gia-dung', price: 90000, condition: 'Tốt', usedTime: '8 tháng', seller: 'u3', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'thach-hoa', createdAt: now - 2 * D, desc: 'Đun nhanh, không rỉ. Đã vệ sinh sạch.' }),
+    L({ title: 'Ghế xoay văn phòng lưới',images: [
+    'images/ghe-xoay-01.png',
+    'images/ghe-xoay-02.png',
+    'images/ghe-xoay-03.png',
+    'images/ghe-xoay-04.png',
+    'images/ghe-xoay-05.png',
+    'images/ghe-xoay-06.png'
+  ], cat: 'noi-that', price: 350000, condition: 'Khá', usedTime: '2 năm', seller: 'u2', cluster: 'hoalac', school: 'ĐH FPT', area: 'tan-xa', createdAt: now - 3 * D, status: 'reserved', reservedBy: 'u1', reservedUntil: now + 20 * H, meetPoint: 'Chợ Tân Xã', desc: 'Ngồi êm, xoay tốt, tựa lưng hơi lỏng.' }),
+    L({ boostUntil: now + 2 * D, title: 'Sách IELTS Cambridge 14–17 (bản photo đẹp)',images: [
+    'images/ielts-01.png',
+    'images/ielts-02.png',
+    'images/ielts-03.png',
+    'images/ielts-04.png',
+    'images/ielts-05.png'
+  ], cat: 'hoc-tap', price: 80000, condition: 'Tốt', usedTime: '6 tháng', seller: 'u3', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'thach-hoa', createdAt: now - 20 * H, desc: '4 cuốn, chưa viết vào.' }),
+    L({ title: 'Đèn học chống cận Rạng Đông',images: [
+    'images/den-rang-dong-01.png',
+    'images/den-rang-dong-02.png',
+    'images/den-rang-dong-03.png',
+    'images/den-rang-dong-04.png'
+  ], cat: 'gia-dung', price: 110000, condition: 'Như mới', usedTime: '4 tháng', seller: 'u1', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 8 * D, status: 'reserved', reservedBy: 'u4', reservedUntil: now + 10 * H, meetPoint: 'Sảnh thư viện ĐH FPT', desc: '3 chế độ sáng, cổng USB.' }),
+    L({ title: 'Bàn phím cơ Fuhlen, switch blue',images: [
+    'images/ban-phim-01.png',
+    'images/ban-phim-02.png',
+    'images/ban-phim-03.png'
+  ], cat: 'dien-tu', price: 280000, condition: 'Tốt', usedTime: '1 năm', seller: 'u1', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 12 * D, status: 'sold', soldTo: 'u2', desc: 'Đủ phím, LED ổn.' }),
+    L({ title: 'Vợt cầu lông Yonex + 3 quả cầu',images: [
+    'images/cau-long-01.png',
+    'images/cau-long-02.png'
+  ], cat: 'xe-the-thao', price: 150000, condition: 'Khá', usedTime: '1 năm', seller: 'u10', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'ktx-dhqg', createdAt: now - 4 * D, desc: 'Cước còn căng.' }),
+    L({ title: 'Áo khoác đồng phục FPT size L',images: [
+    'images/ban-gap-01.png',
+    'images/ban-gap-02.png',
+    'images/ban-gap-03.png',
+    'images/ban-gap-04.png'
+  ], cat: 'quan-ao', price: 60000, condition: 'Tốt', usedTime: '1 năm', seller: 'u4', cluster: 'hoalac', school: 'ĐH FPT', area: 'phu-huu', createdAt: now - 5 * D, desc: 'Đã giặt sạch, không phai màu.' }),
+    L({ title: 'Kệ giày 4 tầng inox',images: [
+    'images/ke-giay-01.png',
+    'images/ke-giay-02.png',
+    'images/ke-giay-03.png',
+    'images/ke-giay-04.png',
+    'images/ke-giay-05.png',
+    'images/ke-giay-06.png'
+  ], cat: 'noi-that', type: 'free', condition: 'Đã cũ', usedTime: '3 năm', seller: 'u2', cluster: 'hoalac', school: 'ĐH FPT', area: 'tan-xa', createdAt: now - 7 * H, desc: 'Hơi rỉ chân nhưng vẫn chắc. Cho bạn nào cần, tự qua lấy.' }),
+    L({ title: 'Chăn ga gối đơn 1m2 + nệm topper',images: [
+    'images/dem-chan-goi-01.png',
+    'images/dem-chan-goi-02.png',
+    'images/dem-chan-goi-03.png',
+    'images/dem-chan-goi-04.png'
+  ], cat: 'quan-ao', price: 200000, condition: 'Tốt', usedTime: '1 năm', seller: 'u5', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', createdAt: now - 5 * H, movingSale: true, desc: 'Đã giặt khô, sạch sẽ, vừa giường KTX.' }),
+    L({ title: 'Máy tính Casio fx-580VN X',images: [
+    'images/may-tinh-fx580-01.png',
+    'images/may-tinh-fx580-02.png'
+  ], cat: 'hoc-tap', type: 'trade', tradeFor: 'Giáo trình Kinh tế vi mô hoặc 100k', price: 0, condition: 'Tốt', usedTime: '2 năm', seller: 'u3', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'thach-hoa', createdAt: now - 36 * H, desc: 'Máy chạy tốt, pin còn khỏe.' }),
+    L({ boostUntil: now + 2 * D, title: 'Hub USB-C 6 in 1 Ugreen',images: [
+    'images/usb-01.png',
+    'images/usb-02.png',
+    'images/usb-03.png',
+    'images/usb-04.png',
+    'images/usb-05.png'
+  ], cat: 'dien-tu', price: 220000, condition: 'Như mới', usedTime: '2 tháng', seller: 'u2', cluster: 'hoalac', school: 'ĐH FPT', area: 'tan-xa', createdAt: now - 14 * H, desc: 'Đổi laptop nên không dùng nữa.' }),
 
     // --- Cầu Giấy ---
-    L({ title: 'Tủ quần áo vải khung thép 3 buồng', cat: 'noi-that', price: 150000, condition: 'Khá', usedTime: '1.5 năm', seller: 'u6', cluster: 'caugiay', school: 'ĐHQGHN – Xuân Thủy', area: 'dich-vong', createdAt: now - 7 * H, movingSale: true, desc: 'Vải còn đẹp, khung chắc. Mình tháo sẵn để bạn dễ mang về.' }),
-    L({ title: 'Combo chuyển trọ: bàn + ghế + tủ lạnh mini', cat: 'noi-that', price: 1100000, condition: 'Tốt', usedTime: '1–2 năm', seller: 'u6', cluster: 'caugiay', school: 'ĐHQGHN – Xuân Thủy', area: 'dich-vong', createdAt: now - 6 * H, movingSale: true, boostUntil: now + 6 * D, combo: [{ name: 'Tủ lạnh mini Aqua 90L', price: 900000 }, { name: 'Bàn học chân sắt 1m', price: 200000 }, { name: 'Ghế gấp', price: 80000 }], desc: 'Ưu tiên lấy cả combo trước ngày 3. Có thể hỗ trợ gọi xe ba gác nội khu.' }),
-    L({ title: 'Giáo trình Tâm lý học đại cương', cat: 'hoc-tap', price: 35000, condition: 'Tốt', usedTime: '1 kỳ', seller: 'u7', cluster: 'caugiay', school: 'ĐH Sư phạm Hà Nội', area: 'mai-dich', createdAt: now - 9 * H, desc: 'Sạch, không ghi chú.' }),
-    L({ title: 'Quạt tích điện mini để bàn', cat: 'gia-dung', price: 80000, condition: 'Tốt', usedTime: '6 tháng', seller: 'u8', cluster: 'caugiay', school: 'Học viện Báo chí & Tuyên truyền', area: 'nghia-tan', createdAt: now - 22 * H, desc: 'Pin dùng được 4–5 tiếng.' }),
-    L({ boostUntil: now + 2 * D, title: 'Xe đạp thể thao Giant ATX, size M', cat: 'xe-the-thao', price: 2300000, condition: 'Tốt', usedTime: '2 năm', seller: 'u9', cluster: 'caugiay', school: 'ĐH Giao thông Vận tải', area: 'quan-hoa', createdAt: now - 2 * D, desc: 'Đã bảo dưỡng, bộ đề chạy mượt.' }),
-    L({ title: 'Tặng sách luyện thi đại học khối D', cat: 'hoc-tap', type: 'free', condition: 'Khá', usedTime: '3 năm', seller: 'u7', cluster: 'caugiay', school: 'ĐH Sư phạm Hà Nội', area: 'mai-dich', createdAt: now - 12 * H, desc: 'Khoảng 10 cuốn, tặng các em hoặc bạn nào cần làm tài liệu.' }),
-    L({ title: 'Loa Bluetooth JBL Go 3, đổi lấy tai nghe', cat: 'dien-tu', type: 'trade', tradeFor: 'Tai nghe true wireless', condition: 'Tốt', usedTime: '1 năm', seller: 'u8', cluster: 'caugiay', school: 'Học viện Báo chí & Tuyên truyền', area: 'nghia-tan', createdAt: now - 3 * D, desc: 'Âm còn to, không rè.' }),
-    L({ title: 'Bếp từ đơn Sunhouse', cat: 'gia-dung', price: 250000, condition: 'Tốt', usedTime: '1 năm', seller: 'u6', cluster: 'caugiay', school: 'ĐHQGHN – Xuân Thủy', area: 'dich-vong', createdAt: now - 8 * H, movingSale: true, desc: 'Tặng kèm nồi lẩu nhỏ.' }),
-    L({ title: 'Kệ sách gỗ 5 tầng', cat: 'noi-that', price: 180000, condition: 'Tốt', usedTime: '1 năm', seller: 'u9', cluster: 'caugiay', school: 'ĐH Giao thông Vận tải', area: 'quan-hoa', createdAt: now - 4 * D, desc: 'Gỗ MDF, cao 1m6.' }),
-    L({ title: 'Váy công sở size M (3 chiếc)', cat: 'quan-ao', price: 120000, condition: 'Như mới', usedTime: '3 tháng', seller: 'u9', cluster: 'caugiay', school: 'ĐH Giao thông Vận tải', area: 'quan-hoa', createdAt: now - 30 * H, desc: 'Mặc vài lần, đã giặt sạch.' }),
-    L({ title: 'Chuột Logitech M331 silent', cat: 'dien-tu', price: 150000, condition: 'Như mới', usedTime: '5 tháng', seller: 'u7', cluster: 'caugiay', school: 'ĐH Sư phạm Hà Nội', area: 'mai-dich', createdAt: now - 16 * H, desc: 'Click không tiếng, pin còn.' }),
+    L({ title: 'Tủ quần áo vải khung thép 3 buồng',images: [
+    'images/tu-quan-ao-01.png',
+    'images/tu-quan-ao-02.png',
+    'images/tu-quan-ao-03.png',
+    'images/tu-quan-ao-04.png'
+  ], cat: 'noi-that', price: 150000, condition: 'Khá', usedTime: '1.5 năm', seller: 'u6', cluster: 'caugiay', school: 'ĐHQGHN – Xuân Thủy', area: 'dich-vong', createdAt: now - 7 * H, movingSale: true, desc: 'Vải còn đẹp, khung chắc. Mình tháo sẵn để bạn dễ mang về.' }),
+    L({ title: 'Combo chuyển trọ: bàn + ghế + tủ lạnh mini',images: [
+    'images/combo-chuyen-tro-01.png',
+    'images/combo-chuyen-tro-02.png',
+    'images/combo-chuyen-tro-03.png'
+  ], cat: 'noi-that', price: 1100000, condition: 'Tốt', usedTime: '1–2 năm', seller: 'u6', cluster: 'caugiay', school: 'ĐHQGHN – Xuân Thủy', area: 'dich-vong', createdAt: now - 6 * H, movingSale: true, boostUntil: now + 6 * D, combo: [{ name: 'Tủ lạnh mini Aqua 90L', price: 900000 }, { name: 'Bàn học chân sắt 1m', price: 200000 }, { name: 'Ghế gấp', price: 80000 }], desc: 'Ưu tiên lấy cả combo trước ngày 3. Có thể hỗ trợ gọi xe ba gác nội khu.' }),
+    L({ title: 'Giáo trình Tâm lý học đại cương',images: [
+    'images/tam-ly-01.png',
+    'images/tam-ly-02.png'
+  ], cat: 'hoc-tap', price: 35000, condition: 'Tốt', usedTime: '1 kỳ', seller: 'u7', cluster: 'caugiay', school: 'ĐH Sư phạm Hà Nội', area: 'mai-dich', createdAt: now - 9 * H, desc: 'Sạch, không ghi chú.' }),
+    L({ title: 'Quạt tích điện mini để bàn',images: [
+    'images/quat-mini-01.png',
+    'images/quat-mini-02.png',
+    'images/quat-mini-03.png',
+    'images/quat-mini-04.png'
+  ], cat: 'gia-dung', price: 80000, condition: 'Tốt', usedTime: '6 tháng', seller: 'u8', cluster: 'caugiay', school: 'Học viện Báo chí & Tuyên truyền', area: 'nghia-tan', createdAt: now - 22 * H, desc: 'Pin dùng được 4–5 tiếng.' }),
+    L({ boostUntil: now + 2 * D, title: 'Xe đạp thể thao Giant ATX, size M',images: [
+    'images/xe-dap-giant-01.png',
+    'images/xe-dap-giant-02.png',
+    'images/xe-dap-giant-03.png',
+    'images/xe-dap-giant-04.png'
+  ], cat: 'xe-the-thao', price: 2300000, condition: 'Tốt', usedTime: '2 năm', seller: 'u9', cluster: 'caugiay', school: 'ĐH Giao thông Vận tải', area: 'quan-hoa', createdAt: now - 2 * D, desc: 'Đã bảo dưỡng, bộ đề chạy mượt.' }),
+    L({ title: 'Tặng sách luyện thi đại học khối D',images: [
+    'images/sach-luyen-thi-d-01.png',
+    'images/sach-luyen-thi-d-02.png'
+  ], cat: 'hoc-tap', type: 'free', condition: 'Khá', usedTime: '3 năm', seller: 'u7', cluster: 'caugiay', school: 'ĐH Sư phạm Hà Nội', area: 'mai-dich', createdAt: now - 12 * H, desc: 'Khoảng 10 cuốn, tặng các em hoặc bạn nào cần làm tài liệu.' }),
+    L({ title: 'Loa Bluetooth JBL Go 3, đổi lấy tai nghe',images: [
+    'images/loa-bluetooth-01.png',
+    'images/loa-bluetooth-02.png',
+    'images/loa-bluetooth-03.png'
+  ], cat: 'dien-tu', type: 'trade', tradeFor: 'Tai nghe true wireless', condition: 'Tốt', usedTime: '1 năm', seller: 'u8', cluster: 'caugiay', school: 'Học viện Báo chí & Tuyên truyền', area: 'nghia-tan', createdAt: now - 3 * D, desc: 'Âm còn to, không rè.' }),
+    L({ title: 'Bếp từ đơn Sunhouse',images: [
+    'images/bep-tu-sunhouse-01.png',
+    'images/bep-tu-sunhouse-02.png',
+    'images/bep-tu-sunhouse-03.png',
+    'images/bep-tu-sunhouse-04.png'
+  ], cat: 'gia-dung', price: 250000, condition: 'Tốt', usedTime: '1 năm', seller: 'u6', cluster: 'caugiay', school: 'ĐHQGHN – Xuân Thủy', area: 'dich-vong', createdAt: now - 8 * H, movingSale: true, desc: 'Tặng kèm nồi lẩu nhỏ.' }),
+    L({ title: 'Kệ sách gỗ 5 tầng',images: [
+    'images/ke-sach-5-tang-01.png',
+    'images/ke-sach-5-tang-02.png',
+    'images/ke-sach-5-tang-03.png',
+    'images/ke-sach-5-tang-04.png'
+  ], cat: 'noi-that', price: 180000, condition: 'Tốt', usedTime: '1 năm', seller: 'u9', cluster: 'caugiay', school: 'ĐH Giao thông Vận tải', area: 'quan-hoa', createdAt: now - 4 * D, desc: 'Gỗ MDF, cao 1m6.' }),
+    L({ title: 'Váy công sở size M (3 chiếc)',images: [
+    'images/vay-cong-so-01.png',
+    'images/vay-cong-so-02.png',
+    'images/vay-cong-so-03.png'
+  ], cat: 'quan-ao', price: 120000, condition: 'Như mới', usedTime: '3 tháng', seller: 'u9', cluster: 'caugiay', school: 'ĐH Giao thông Vận tải', area: 'quan-hoa', createdAt: now - 30 * H, desc: 'Mặc vài lần, đã giặt sạch.' }),
+    L({ title: 'Chuột Logitech M331 silent',images: [
+    'images/chuot-logitech-01.png',
+    'images/chuot-logitech-02.png',
+    'images/chuot-logitech-03.png',
+    'images/chuot-logitech-04.png'
+  ], cat: 'dien-tu', price: 150000, condition: 'Như mới', usedTime: '5 tháng', seller: 'u7', cluster: 'caugiay', school: 'ĐH Sư phạm Hà Nội', area: 'mai-dich', createdAt: now - 16 * H, desc: 'Click không tiếng, pin còn.' }),
   ];
 
   const reviews = [
