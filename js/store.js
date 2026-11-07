@@ -8,7 +8,7 @@
  * không đặt giữ, không đánh giá (lộ trình 2028), không thu hoa hồng.
  */
 window.api = (function () {
-  const DB_KEY = 'remarket_db_v5';
+  const DB_KEY = 'remarket_db_v6';
   const SESSION_KEY = 'remarket_session_v1';
   const H = 3600 * 1000;
   const D = 24 * H;
