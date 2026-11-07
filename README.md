@@ -15,10 +15,10 @@ Tài khoản demo (mật khẩu `123456`), hoặc bấm đăng nhập nhanh trê
 
 | Email | Vai trò trong demo |
 |---|---|
-| linhhm@fpt.edu.vn | Hoàng Mai Linh – sinh viên sắp ra trường, đang bán đồ (đã dùng hết 2 tin miễn phí của tài khoản) |
-| minhtd@gmail.com | Trần Đức Minh – tân sinh viên đi mua đồ |
-| hung.deal@gmail.com | Lê Văn Hùng – người bán đáng ngờ (tin iPad đòi đặt cọc) |
-| admin@remarket.vn | Quản trị viên – trang Kiểm duyệt `#/admin` |
+| phuong@fpt.edu.vn | Huỳnh Trần Nam Phương – sinh viên sắp ra trường, đang bán đồ (đã dùng hết 2 tin miễn phí của tài khoản) |
+| duc@gmail.com | Trần Anh Đức – tân sinh viên đi mua đồ |
+| duy.deal@gmail.com | Nguyễn Quang Duy – người bán đáng ngờ (tin iPad đòi đặt cọc) |
+| admin@remarket.vn | Kiều Đoàn Đạt – quản trị viên, trang Kiểm duyệt `#/admin` |
 | minhanh@fpt.edu.vn | Nguyễn Minh Anh – có tin đã tự ẩn sau 30 ngày để demo gia hạn |
 
 Mã xác thực email demo: `123456`. Link "Khôi phục dữ liệu mẫu" ở chân trang để reset.

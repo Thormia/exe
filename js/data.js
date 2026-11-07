@@ -44,16 +44,16 @@ window.MOCK = (function () {
 
   // emailVerified: tài khoản đã xác thực email. phone + showPhone: số liên hệ do người dùng tự chọn hiển thị.
   const users = [
-    { id: 'u0', role: 'admin', name: 'Quản trị viên ReMarket', email: 'admin@remarket.vn', password: '123456', cluster: 'hoalac', school: 'Người đi làm / cư dân', area: 'ktx-fpt', emailVerified: true, joinedAt: now - 300 * D, bio: 'Tài khoản kiểm duyệt của nhóm vận hành.' },
+    { id: 'u0', role: 'admin', name: 'Kiều Đoàn Đạt', email: 'admin@remarket.vn', password: '123456', cluster: 'hoalac', school: 'Người đi làm / cư dân', area: 'ktx-fpt', emailVerified: true, joinedAt: now - 300 * D, bio: 'Quản trị viên, kiểm duyệt tin đăng của ReMarket.' },
     { id: 'u1', name: 'Nguyễn Minh Anh', email: 'minhanh@fpt.edu.vn', password: '123456', phone: '0912345678', showPhone: true, cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', emailVerified: true, joinedAt: now - 120 * D, bio: 'K19 FPT, hay mua bán sách và đồ phòng KTX.' },
     { id: 'u2', name: 'Trần Quốc Huy', email: 'huytq@gmail.com', password: '123456', phone: '0987654321', showPhone: true, cluster: 'hoalac', school: 'ĐH FPT', area: 'tan-xa', emailVerified: true, joinedAt: now - 200 * D, bio: 'Trọ ở Tân Xã.' },
     { id: 'u3', name: 'Lê Thu Trang', email: 'trang.lt@vnu.edu.vn', password: '123456', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'thach-hoa', emailVerified: true, joinedAt: now - 90 * D, bio: '' },
-    { id: 'u4', name: 'Trần Đức Minh', email: 'minhtd@gmail.com', password: '123456', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', emailVerified: true, joinedAt: now - 10 * D, bio: 'Tân sinh viên, mới lên Hòa Lạc, đang sắm đồ phòng.' },
-    { id: 'u5', name: 'Hoàng Mai Linh', email: 'linhhm@fpt.edu.vn', password: '123456', phone: '0934567890', showPhone: true, cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', emailVerified: true, joinedAt: now - 700 * D, bio: 'Sắp ra trường, thanh lý đồ phòng.' },
+    { id: 'u4', name: 'Trần Anh Đức', email: 'duc@gmail.com', password: '123456', cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', emailVerified: true, joinedAt: now - 10 * D, bio: 'Tân sinh viên, mới lên Hòa Lạc, đang sắm đồ phòng.' },
+    { id: 'u5', name: 'Huỳnh Trần Nam Phương', email: 'phuong@fpt.edu.vn', password: '123456', phone: '0934567890', showPhone: true, cluster: 'hoalac', school: 'ĐH FPT', area: 'ktx-fpt', emailVerified: true, joinedAt: now - 700 * D, bio: 'Sắp ra trường, thanh lý đồ phòng.' },
     { id: 'u10', name: 'Đặng Gia Bảo', email: 'baodg@vnu.edu.vn', password: '123456', cluster: 'hoalac', school: 'ĐHQGHN – Hòa Lạc', area: 'ktx-dhqg', emailVerified: true, joinedAt: now - 45 * D, bio: 'Đam mê xe đạp.' },
     { id: 'u12', name: 'Chị Ngọc Thạch Hòa', email: 'ngoc.th@gmail.com', password: '123456', phone: '0966778899', showPhone: false, cluster: 'hoalac', school: 'Người đi làm / cư dân', area: 'thach-hoa', emailVerified: true, joinedAt: now - 60 * D, bio: 'Người đi làm ở khu công nghệ cao, thanh lý đồ gia đình.' },
     // Tài khoản dùng cho Màn 5 của tiểu phẩm: người bán đáng ngờ
-    { id: 'u11', name: 'Lê Văn Hùng', email: 'hung.deal@gmail.com', password: '123456', cluster: 'hoalac', school: 'Trường khác', area: 'phu-huu', emailVerified: true, joinedAt: now - 5 * D, bio: '' },
+    { id: 'u11', name: 'Nguyễn Quang Duy', email: 'duy.deal@gmail.com', password: '123456', cluster: 'hoalac', school: 'Trường khác', area: 'phu-huu', emailVerified: true, joinedAt: now - 5 * D, bio: '' },
   ];
 
   let seq = 0;
@@ -140,7 +140,7 @@ window.MOCK = (function () {
 
   // Thông báo mẫu (kind: status | report | pay | system)
   const notifications = [
-    { id: 'n1', to: 'u1', kind: 'status', text: 'Trần Đức Minh vừa hẹn gặp về “Đèn học chống cận Rạng Đông”. Nếu đã bán, hãy cập nhật trạng thái để người khác không hỏi nữa.', link: '#/item/l11', at: now - 2 * H, read: false },
+    { id: 'n1', to: 'u1', kind: 'status', text: 'Trần Anh Đức vừa hẹn gặp về “Đèn học chống cận Rạng Đông”. Nếu đã bán, hãy cập nhật trạng thái để người khác không hỏi nữa.', link: '#/item/l11', at: now - 2 * H, read: false },
     { id: 'n3', to: 'u1', kind: 'system', text: 'Tin “Giáo trình Toán rời rạc” đang được nhiều người xem. Đẩy tin chỉ 5.000đ/lượt để lên đầu mục Mới đăng.', link: '#/item/l4', at: now - 5 * H, read: false },
   ];
   users.forEach(u => {

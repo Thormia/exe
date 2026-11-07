@@ -1366,7 +1366,7 @@
   // ---------- Đăng nhập / Đăng ký / Xác thực email ----------
   function viewLogin(q) {
     const demos = ['u5', 'u4', 'u11', 'u0', 'u1'].map(api.getUser).filter(Boolean);
-    const roleOf = { u5: 'Người bán – sắp ra trường', u4: 'Người mua – tân sinh viên', u11: 'Người bán đáng ngờ (Màn 5)', u0: 'Quản trị viên kiểm duyệt', u1: 'Người bán có tin đã tự ẩn' };
+    const roleOf = { u5: 'Người bán – sắp ra trường (đã hết lượt miễn phí)', u4: 'Người mua – tân sinh viên', u11: 'Người bán đáng ngờ (tin iPad)', u0: 'Quản trị viên kiểm duyệt', u1: 'Người bán có tin đã tự ẩn' };
     return `<div class="container page auth">
       <div class="panel auth-card">
         <h1>Đăng nhập</h1>
