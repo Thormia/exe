@@ -8,7 +8,7 @@
  * không đặt giữ, không đánh giá (lộ trình 2028), không thu hoa hồng.
  */
 window.api = (function () {
-  const DB_KEY = 'remarket_db_v4';
+  const DB_KEY = 'remarket_db_v5';
   const SESSION_KEY = 'remarket_session_v1';
   const H = 3600 * 1000;
   const D = 24 * H;
@@ -19,6 +19,8 @@ window.api = (function () {
 
   function seed() {
     const m = JSON.parse(JSON.stringify(window.MOCK));
+    // Số tin bán / trao đổi mỗi tài khoản đã đăng (tin cho tặng không tính vào hạn mức)
+    m.users.forEach(u => { u.postsUsed = m.listings.filter(l => l.seller === u.id && l.type !== 'free').length; });
     return {
       users: m.users,
       listings: m.listings,
@@ -61,7 +63,7 @@ window.api = (function () {
     listingDays: LISTING_DAYS,
     /* Bảng giá theo cp4 mục 3.5 */
     pricing: {
-      freePosts: 2,                                      // 2 tin đầu miễn phí mỗi tháng
+      freePosts: 2,                                      // 2 tin bán / trao đổi miễn phí cho mỗi tài khoản; tin cho tặng không tính
       extraPosts: { price: 5000, posts: 2 },             // Mua thêm tin: 5.000đ / gói 2 tin
       bump: { price: 5000 },                             // Đẩy tin: 5.000đ / lượt
       featured: { price: 10000, days: 3 },               // Tin ưu tiên: 10.000đ / 3 ngày
@@ -106,7 +108,7 @@ window.api = (function () {
     if (db.users.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) throw new Error('Email này đã được đăng ký.');
     const u = {
       id: uid('u'), name: name.trim(), email: email.trim(), password, cluster: 'hoalac', school, area,
-      emailVerified: false, joinedAt: Date.now(), bio: '', phone: '', showPhone: false,
+      emailVerified: false, joinedAt: Date.now(), bio: '', phone: '', showPhone: false, postsUsed: 0,
     };
     db.users.push(u);
     persist();
@@ -120,7 +122,7 @@ window.api = (function () {
     if (!u) throw new Error('Chưa đăng nhập.');
     if (String(code).trim() !== DEMO_CODE) throw new Error(`Mã xác thực không đúng (mã demo: ${DEMO_CODE}).`);
     u.emailVerified = true;
-    notify(u.id, 'system', `Chào mừng bạn đến ReMarket! Mỗi tháng bạn có ${ref.pricing.freePosts} tin đăng miễn phí.`, '#/pricing');
+    notify(u.id, 'system', `Chào mừng bạn đến ReMarket! Tài khoản của bạn có ${ref.pricing.freePosts} tin bán / trao đổi miễn phí; tin cho tặng luôn miễn phí và không tính vào hạn mức.`, '#/pricing');
     persist();
     return u;
   }
@@ -186,7 +188,9 @@ window.api = (function () {
     let rs = db.listings.filter(l => statuses.includes(l.status));
     if (q) rs = rs.filter(l => (l.title + ' ' + l.desc + ' ' + (l.tradeFor || '')).toLowerCase().includes(q));
     if (f.cat) rs = rs.filter(l => l.cat === f.cat);
+    // Cho tặng là mục riêng: chỉ trả về khi hỏi type=free hoặc includeFree
     if (f.type) rs = rs.filter(l => l.type === f.type);
+    else if (!f.includeFree) rs = rs.filter(l => l.type !== 'free');
     if (f.school) rs = rs.filter(l => l.school === f.school);
     if (f.area) rs = rs.filter(l => l.area === f.area);
     if (f.cond) rs = rs.filter(l => l.condition === f.cond);
@@ -260,14 +264,16 @@ window.api = (function () {
     const me = currentUser();
     assertCanPost(me);
     validate(data);
-    const q = quota();
-    if (!q.freeLeft) {
-      if (!q.credits) {
-        const err = new Error(`Bạn đã dùng hết ${ref.pricing.freePosts} tin miễn phí tháng này. Mua thêm ${ref.pricing.extraPosts.posts} tin chỉ ${ref.pricing.extraPosts.price.toLocaleString('vi-VN')}đ.`);
+    // Tin cho tặng luôn miễn phí và không tính vào hạn mức
+    if (data.type !== 'free') {
+      const q = quota();
+      if (q.freeLeft) me.postsUsed = (me.postsUsed || 0) + 1;
+      else if (q.credits) me.postCredits -= 1;
+      else {
+        const err = new Error(`Bạn đã dùng hết ${ref.pricing.freePosts} tin miễn phí của tài khoản. Mua thêm ${ref.pricing.extraPosts.posts} tin chỉ ${ref.pricing.extraPosts.price.toLocaleString('vi-VN')}đ.`);
         err.code = 'QUOTA';
         throw err;
       }
-      me.postCredits -= 1;
     }
     const l = Object.assign({
       id: uid('l'), seller: me.id, cluster: 'hoalac', status: 'available', views: 0,
@@ -284,6 +290,7 @@ window.api = (function () {
     const l = raw(id);
     assertOwner(l);
     if (l.status === 'removed') throw new Error('Tin đã bị gỡ do vi phạm, không thể sửa.');
+    if (data.type && (data.type === 'free') !== (l.type === 'free')) throw new Error('Không đổi được giữa tin cho tặng và tin bán / trao đổi. Hãy đăng tin mới.');
     validate(Object.assign({}, l, data));
     Object.assign(l, data);
     if (l.type === 'free') l.price = 0;
@@ -329,13 +336,11 @@ window.api = (function () {
     persist();
   }
 
-  // GET /me/quota — số tin miễn phí còn lại trong tháng + lượt đã mua
+  // GET /me/quota — số tin bán / trao đổi miễn phí còn lại của tài khoản + lượt đã mua
   function quota() {
     const me = currentUser();
     if (!me) return { used: 0, freeLeft: 0, credits: 0 };
-    const d = new Date();
-    const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-    const used = db.listings.filter(l => l.seller === me.id && l.createdAt >= monthStart).length;
+    const used = me.postsUsed || 0;
     return { used, freeLeft: Math.max(0, ref.pricing.freePosts - used), credits: me.postCredits || 0 };
   }
 
@@ -349,15 +354,17 @@ window.api = (function () {
     opts = opts || {};
     const P = ref.pricing;
     let amount = 0, desc = '', l = null;
+    if (kind === 'bump' || kind === 'featured') {
+      l = raw(opts.listingId); assertOwner(l);
+      if (l.type === 'free') throw new Error('Tin cho tặng không cần mua dịch vụ hiển thị.');
+    }
     if (kind === 'posts') {
       amount = P.extraPosts.price; desc = `Mua thêm ${P.extraPosts.posts} tin đăng`;
       me.postCredits = (me.postCredits || 0) + P.extraPosts.posts;
     } else if (kind === 'bump') {
-      l = raw(opts.listingId); assertOwner(l);
       amount = P.bump.price; desc = 'Đẩy tin lên đầu mục Mới đăng';
       l.bumpedAt = Date.now();
     } else if (kind === 'featured') {
-      l = raw(opts.listingId); assertOwner(l);
       amount = P.featured.price; desc = `Tin ưu tiên ${P.featured.days} ngày`;
       l.boostUntil = Math.max(Date.now(), l.boostUntil || 0) + P.featured.days * D;
     } else if (kind === 'banner') {
