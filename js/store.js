@@ -2,12 +2,18 @@
  * Lớp "API giả" — toàn bộ đọc/ghi dữ liệu đi qua đối tượng `api` này.
  * Hiện dữ liệu lưu ở localStorage. Khi làm backend, chỉ cần thay phần thân
  * các hàm bằng lời gọi fetch() tới REST API tương ứng (ghi chú ở mỗi hàm).
+ *
+ * Phạm vi bám theo báo cáo cp4: xác thực email, đăng trước – kiểm duyệt sau,
+ * người bán tự xác nhận trạng thái, tin tự ẩn sau 30 ngày, 4 dịch vụ trả phí,
+ * không đặt giữ, không đánh giá (lộ trình 2028), không thu hoa hồng.
  */
 window.api = (function () {
-  const DB_KEY = 'remarket_db_v3';
+  const DB_KEY = 'remarket_db_v4';
   const SESSION_KEY = 'remarket_session_v1';
   const H = 3600 * 1000;
   const D = 24 * H;
+  const LISTING_DAYS = 30;     // tin không cập nhật sau 30 ngày sẽ tự ẩn
+  const DEMO_CODE = '123456';  // mã xác thực email trong bản demo
 
   let db = load();
 
@@ -16,13 +22,11 @@ window.api = (function () {
     return {
       users: m.users,
       listings: m.listings,
-      reviews: m.reviews,
+      reports: m.reports,
       conversations: m.conversations,
       notifications: m.notifications,
       payments: m.payments,
-      reports: [],
-      serviceRequests: [],
-      guestCluster: 'hoalac',
+      bannerRequests: [],
     };
   }
 
@@ -53,20 +57,17 @@ window.api = (function () {
     clusters: window.MOCK.clusters,
     categories: window.MOCK.categories,
     conditions: window.MOCK.conditions,
-    partners: window.MOCK.partners,
-    /*
-     * Bảng giá theo "ReMarket - Mô hình tài chính.xlsx" (sheet Doanh thu).
-     * Riêng banner 2 bên chưa có trong mô hình — đây là giá đề xuất, sửa tại đây.
-     */
+    advertisers: window.MOCK.advertisers,
+    listingDays: LISTING_DAYS,
+    /* Bảng giá theo cp4 mục 3.5 */
     pricing: {
-      freePosts: 2,                                  // 2 tin đầu miễn phí mỗi tháng
-      extraPosts: { price: 5000, posts: 2 },          // Phí đăng thêm tin: 5.000đ / 2 tin
-      bump: { price: 5000 },                          // Đẩy tin: 5.000đ / lượt
-      featured: { price: 10000, days: 3 },            // Tin ưu tiên (nổi bật): 10.000đ / 3 ngày
-      partner: { price: 300000, unit: 'tháng' },      // Gói đối tác cửa hàng
-      banner: { price: 200000, unit: 'tuần' },        // Banner 2 bên trang chủ (giá đề xuất)
+      freePosts: 2,                                      // 2 tin đầu miễn phí mỗi tháng
+      extraPosts: { price: 5000, posts: 2 },             // Mua thêm tin: 5.000đ / gói 2 tin
+      bump: { price: 5000 },                             // Đẩy tin: 5.000đ / lượt
+      featured: { price: 10000, days: 3 },               // Tin ưu tiên: 10.000đ / 3 ngày
+      banner: { price: 300000, unit: 'tháng' },          // Banner đối tác: 300.000đ / tháng / vị trí
     },
-    cluster(id) { return this.clusters.find(c => c.id === id); },
+    cluster(id) { return this.clusters.find(c => c.id === id) || this.clusters[0]; },
     category(id) { return this.categories.find(c => c.id === id); },
     area(clusterId, areaId) {
       const c = this.cluster(clusterId);
@@ -75,11 +76,12 @@ window.api = (function () {
   };
 
   // ---------- Phiên đăng nhập ----------
-  // POST /auth/login, POST /auth/register, GET /me
+  // POST /auth/login, POST /auth/register, POST /auth/verify-email, GET /me
   function currentUser() {
     const id = localStorage.getItem(SESSION_KEY);
     return id ? db.users.find(u => u.id === id) || null : null;
   }
+  const isAdmin = u => !!(u && u.role === 'admin');
 
   function login(email, password) {
     const u = db.users.find(x => x.email.toLowerCase() === String(email).trim().toLowerCase());
@@ -97,18 +99,29 @@ window.api = (function () {
     localStorage.removeItem(SESSION_KEY);
   }
 
-  function register({ name, email, password, cluster, school, area }) {
+  function register({ name, email, password, school, area }) {
     if (!name || !email || !password) throw new Error('Vui lòng điền đủ họ tên, email và mật khẩu.');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) throw new Error('Email không hợp lệ.');
     if (password.length < 6) throw new Error('Mật khẩu cần tối thiểu 6 ký tự.');
-    if (db.users.some(u => u.email.toLowerCase() === email.toLowerCase())) throw new Error('Email này đã được đăng ký.');
+    if (db.users.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) throw new Error('Email này đã được đăng ký.');
     const u = {
-      id: uid('u'), name: name.trim(), email: email.trim(), password, cluster, school, area,
-      verified: { student: false, phone: false }, joinedAt: Date.now(), bio: '',
+      id: uid('u'), name: name.trim(), email: email.trim(), password, cluster: 'hoalac', school, area,
+      emailVerified: false, joinedAt: Date.now(), bio: '', phone: '', showPhone: false,
     };
     db.users.push(u);
-    notify(u.id, 'system', `Chào mừng bạn đến ReMarket! Mỗi tháng bạn có ${ref.pricing.freePosts} tin đăng miễn phí.`, '#/pricing');
     persist();
     localStorage.setItem(SESSION_KEY, u.id);
+    return u;
+  }
+
+  // POST /auth/verify-email
+  function verifyEmail(code) {
+    const u = currentUser();
+    if (!u) throw new Error('Chưa đăng nhập.');
+    if (String(code).trim() !== DEMO_CODE) throw new Error(`Mã xác thực không đúng (mã demo: ${DEMO_CODE}).`);
+    u.emailVerified = true;
+    notify(u.id, 'system', `Chào mừng bạn đến ReMarket! Mỗi tháng bạn có ${ref.pricing.freePosts} tin đăng miễn phí.`, '#/pricing');
+    persist();
     return u;
   }
 
@@ -116,131 +129,75 @@ window.api = (function () {
   function updateProfile(patch) {
     const u = currentUser();
     if (!u) throw new Error('Chưa đăng nhập.');
+    if (patch.phone && !/^0\d{9}$/.test(patch.phone.trim())) throw new Error('Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0).');
     Object.assign(u, patch);
     persist();
     return u;
   }
 
-  // POST /me/verify  — mock: email .edu.vn với mã 123456, hoặc ảnh thẻ SV (duyệt ngay)
-  function verifyStudentEmail(email, code) {
-    if (!/\.edu\.vn$/i.test(email.trim())) throw new Error('Cần email sinh viên có đuôi .edu.vn');
-    if (code !== '123456') throw new Error('Mã xác thực không đúng (mã demo: 123456).');
-    return updateProfile({ verified: Object.assign({}, currentUser().verified, { student: true }) });
-  }
-  function verifyStudentCard() {
-    return updateProfile({ verified: Object.assign({}, currentUser().verified, { student: true }) });
-  }
-  function verifyPhone(phone, code) {
-    if (!/^0\d{9}$/.test(phone.trim())) throw new Error('Số điện thoại không hợp lệ.');
-    if (code !== '123456') throw new Error('Mã OTP không đúng (mã demo: 123456).');
-    return updateProfile({ verified: Object.assign({}, currentUser().verified, { phone: true }), phone: phone.trim() });
-  }
+  function activeClusterId() { return 'hoalac'; }
 
-  // ---------- Cụm ----------
-  function activeClusterId() {
-    const u = currentUser();
-    return u ? u.cluster : db.guestCluster;
-  }
-  function setActiveCluster(id) {
-    const u = currentUser();
-    if (u) updateProfile({ cluster: id, school: ref.cluster(id).schools[0], area: ref.cluster(id).areas[0].id });
-    else { db.guestCluster = id; persist(); }
-  }
-
-  // ---------- Người dùng & đánh giá ----------
+  // ---------- Người dùng ----------
   // GET /users/:id
   function getUser(id) { return db.users.find(u => u.id === id) || null; }
   function allUsers() { return db.users; }
 
-  // GET /users/:id/reviews
-  function reviewsFor(userId) {
-    return db.reviews.filter(r => r.to === userId).sort((a, b) => b.createdAt - a.createdAt);
-  }
-  function reviewsBy(userId) {
-    return db.reviews.filter(r => r.from === userId).sort((a, b) => b.createdAt - a.createdAt);
-  }
-  // Đánh giá mới nhất trong cụm (theo người được đánh giá)
-  function recentReviews(clusterId, n) {
-    return db.reviews
-      .filter(r => { const u = getUser(r.to); return u && u.cluster === clusterId && r.text; })
-      .sort((a, b) => b.createdAt - a.createdAt).slice(0, n || 6);
-  }
-  function rating(userId) {
-    const rs = reviewsFor(userId);
-    if (!rs.length) return { avg: 0, count: 0 };
-    return { avg: rs.reduce((s, r) => s + r.stars, 0) / rs.length, count: rs.length };
-  }
-
-  // Giao dịch đã hoàn tất mà người dùng hiện tại chưa đánh giá đối phương
-  function pendingReviews() {
-    const me = currentUser();
-    if (!me) return [];
-    return db.listings
-      .filter(l => l.status === 'sold' && l.soldTo && (l.seller === me.id || l.soldTo === me.id))
-      .filter(l => !db.reviews.some(r => r.from === me.id && r.listingId === l.id))
-      .map(l => ({ listing: l, other: getUser(l.seller === me.id ? l.soldTo : l.seller) }));
-  }
-
-  // POST /reviews
-  function addReview(listingId, toUserId, stars, text) {
-    const me = currentUser();
-    if (!me) throw new Error('Chưa đăng nhập.');
-    db.reviews.push({ id: uid('r'), from: me.id, to: toUserId, listingId, stars, text: text.trim(), createdAt: Date.now() });
-    notify(toUserId, 'review', `${me.name} đã đánh giá bạn ${stars}★${text.trim() ? `: “${text.trim()}”` : '.'}`, '#/reviews?tab=received');
-    persist();
-  }
-
   // ---------- Tin đăng ----------
   function distanceKm(l, fromUser) {
-    const c = ref.cluster(l.cluster);
     const a = ref.area(l.cluster, l.area) || { x: 0, y: 0 };
     let o = { x: 0, y: 0 };
-    if (fromUser && fromUser.cluster === l.cluster) o = ref.area(fromUser.cluster, fromUser.area) || o;
-    if (!c) return 0;
+    if (fromUser) o = ref.area(fromUser.cluster, fromUser.area) || o;
     return Math.round((Math.hypot(a.x - o.x, a.y - o.y) + (l.jitter || 0)) * 10) / 10;
   }
 
   function isBoosted(l) { return l.boostUntil && l.boostUntil > Date.now(); }
-  const freshAt = l => Math.max(l.createdAt, l.bumpedAt || 0);  // đẩy tin = làm mới thời gian
+  const freshAt = l => Math.max(l.createdAt, l.bumpedAt || 0);                        // đẩy tin = làm mới thứ tự
+  const refreshedAt = l => Math.max(l.createdAt, l.renewedAt || 0, l.bumpedAt || 0);   // mốc tính 30 ngày
+  const expiresAt = l => refreshedAt(l) + LISTING_DAYS * D;
 
-  function expireReservations() {
+  // Tin đang hiển thị quá 30 ngày không cập nhật → tự ẩn, báo người bán gia hạn miễn phí
+  function expireListings() {
     let changed = false;
     db.listings.forEach(l => {
-      if (l.status === 'reserved' && l.reservedUntil && l.reservedUntil < Date.now()) {
-        l.status = 'available'; l.reservedBy = null; l.reservedUntil = 0; l.meetPoint = ''; changed = true;
+      if (l.status === 'available' && expiresAt(l) < Date.now()) {
+        l.status = 'expired';
+        l.expiredAt = Date.now();
+        notify(l.seller, 'status', `Tin “${l.title}” đã tự ẩn vì ${LISTING_DAYS} ngày chưa cập nhật. Gia hạn miễn phí nếu món đồ vẫn còn.`, '#/me');
+        changed = true;
       }
     });
     if (changed) persist();
   }
 
+  function decorate(l, me) {
+    return Object.assign({}, l, { distance: distanceKm(l, me), boosted: isBoosted(l), expiresAt: expiresAt(l) });
+  }
+
   /*
-   * GET /listings?cluster=&q=&cat=&type=&min=&max=&school=&area=&dist=&cond=&sort=
-   * sort: 'priority' (mặc định: nổi bật → cùng khu trọ → cùng trường → gần → mới), 'near', 'new', 'priceAsc', 'priceDesc'
+   * GET /listings?q=&cat=&type=&min=&max=&school=&area=&dist=&cond=&sort=
+   * Mặc định chỉ trả tin đang hiển thị. statuses: danh sách trạng thái (dùng cho trang của người bán).
+   * sort: 'priority' (mặc định: ưu tiên → cùng khu trọ → cùng trường → gần → mới), 'near', 'new', 'priceAsc', 'priceDesc'
    */
   function searchListings(f = {}) {
-    expireReservations();
+    expireListings();
     const me = currentUser();
-    const cluster = f.cluster || activeClusterId();
     const q = (f.q || '').trim().toLowerCase();
-    let rs = db.listings.filter(l => l.cluster === cluster);
-    rs = rs.filter(l => f.includeSold ? true : l.status !== 'sold');
-    if (q) rs = rs.filter(l => (l.title + ' ' + l.desc + ' ' + (l.tradeFor || '') + ' ' + (l.combo || []).map(i => i.name).join(' ')).toLowerCase().includes(q));
+    const statuses = f.statuses || ['available'];
+    let rs = db.listings.filter(l => statuses.includes(l.status));
+    if (q) rs = rs.filter(l => (l.title + ' ' + l.desc + ' ' + (l.tradeFor || '')).toLowerCase().includes(q));
     if (f.cat) rs = rs.filter(l => l.cat === f.cat);
     if (f.type) rs = rs.filter(l => l.type === f.type);
     if (f.school) rs = rs.filter(l => l.school === f.school);
     if (f.area) rs = rs.filter(l => l.area === f.area);
     if (f.cond) rs = rs.filter(l => l.condition === f.cond);
-    if (f.moving) rs = rs.filter(l => l.movingSale);
-    if (f.combo) rs = rs.filter(l => l.combo && l.combo.length);
     if (f.min) rs = rs.filter(l => l.type !== 'sell' || l.price >= Number(f.min));
     if (f.max) rs = rs.filter(l => l.type !== 'sell' || l.price <= Number(f.max));
     if (f.seller) rs = rs.filter(l => l.seller === f.seller);
     if (f.exclude) rs = rs.filter(l => l.id !== f.exclude);
 
-    rs = rs.map(l => Object.assign({}, l, { distance: distanceKm(l, me), boosted: isBoosted(l) }));
+    rs = rs.map(l => decorate(l, me));
     if (f.dist) rs = rs.filter(l => l.distance <= Number(f.dist));
 
-    const sort = f.sort || 'priority';
     const score = l => {
       let s = 0;
       if (l.boosted) s += 100;
@@ -248,7 +205,6 @@ window.api = (function () {
       if (me && l.school === me.school) s += 15;
       s -= l.distance * 5;
       s -= (Date.now() - freshAt(l)) / D * 2;
-      if (l.status === 'reserved') s -= 40;
       return s;
     };
     const cmp = {
@@ -257,18 +213,18 @@ window.api = (function () {
       new: (a, b) => freshAt(b) - freshAt(a),
       priceAsc: (a, b) => a.price - b.price,
       priceDesc: (a, b) => b.price - a.price,
-    }[sort] || ((a, b) => score(b) - score(a));
+    }[f.sort || 'priority'] || ((a, b) => score(b) - score(a));
     rs.sort(cmp);
     return rs;
   }
 
   // GET /listings/:id
   function getListing(id, countView) {
-    expireReservations();
+    expireListings();
     const l = db.listings.find(x => x.id === id);
     if (!l) return null;
     if (countView) { l.views = (l.views || 0) + 1; persist(); }
-    return Object.assign({}, l, { distance: distanceKm(l, currentUser()), boosted: isBoosted(l) });
+    return decorate(l, currentUser());
   }
 
   function raw(id) {
@@ -286,16 +242,23 @@ window.api = (function () {
   function validate(data) {
     if (!data.title || data.title.trim().length < 5) throw new Error('Tiêu đề cần tối thiểu 5 ký tự.');
     if (!data.cat) throw new Error('Chọn danh mục.');
+    if (!data.images || !data.images.length) throw new Error('Thêm ít nhất 1 ảnh thật của sản phẩm.');
     if (data.type === 'sell' && !(data.price > 0)) throw new Error('Nhập giá bán.');
     if (data.type === 'trade' && !data.tradeFor) throw new Error('Nhập món bạn muốn đổi lấy.');
     if (!data.condition) throw new Error('Chọn tình trạng.');
-    if (!data.area) throw new Error('Chọn khu vực giao nhận.');
+    if (!data.area) throw new Error('Chọn khu vực giao dịch.');
   }
 
-  // POST /listings
+  function assertCanPost(me) {
+    if (!me) throw new Error('Bạn cần đăng nhập để đăng tin.');
+    if (!me.emailVerified) { const e = new Error('Xác thực email trước khi đăng tin.'); e.code = 'VERIFY'; throw e; }
+    if (me.restricted) throw new Error('Tài khoản đang bị hạn chế đăng tin do vi phạm quy định nhiều lần.');
+  }
+
+  // POST /listings — tin hợp lệ về biểu mẫu được hiển thị ngay, kiểm duyệt sau
   function createListing(data) {
     const me = currentUser();
-    if (!me) throw new Error('Bạn cần đăng nhập để đăng tin.');
+    assertCanPost(me);
     validate(data);
     const q = quota();
     if (!q.freeLeft) {
@@ -307,23 +270,27 @@ window.api = (function () {
       me.postCredits -= 1;
     }
     const l = Object.assign({
-      id: uid('l'), seller: me.id, cluster: me.cluster, status: 'available', views: 0,
-      createdAt: Date.now(), jitter: Math.random() * 0.4, boostUntil: 0, reservedBy: null,
-      reservedUntil: 0, meetPoint: '', soldTo: null,
+      id: uid('l'), seller: me.id, cluster: 'hoalac', status: 'available', views: 0,
+      createdAt: Date.now(), jitter: Math.random() * 0.4, boostUntil: 0, renewedAt: 0,
     }, data);
-    if (l.type !== 'sell') l.price = l.type === 'free' ? 0 : (l.price || 0);
+    if (l.type === 'free') l.price = 0;
     db.listings.unshift(l);
     persist();
     return l;
   }
 
-  // PATCH /listings/:id
+  // PATCH /listings/:id — tin bị yêu cầu chỉnh sửa sẽ hiển thị lại sau khi người bán sửa
   function updateListing(id, data) {
     const l = raw(id);
     assertOwner(l);
+    if (l.status === 'removed') throw new Error('Tin đã bị gỡ do vi phạm, không thể sửa.');
     validate(Object.assign({}, l, data));
     Object.assign(l, data);
     if (l.type === 'free') l.price = 0;
+    if (l.status === 'hidden') {
+      l.status = 'available'; l.renewedAt = Date.now();
+      db.users.filter(isAdmin).forEach(a => notify(a.id, 'report', `Tin “${l.title}” đã được người bán chỉnh sửa và hiển thị lại.`, '#/admin'));
+    }
     persist();
     return l;
   }
@@ -336,50 +303,29 @@ window.api = (function () {
     persist();
   }
 
-  // POST /listings/:id/reserve
-  function reserve(id, meetPoint, hours) {
-    const me = currentUser();
-    if (!me) throw new Error('Bạn cần đăng nhập để đặt giữ.');
-    const l = raw(id);
-    if (l.seller === me.id) throw new Error('Không thể tự đặt giữ tin của mình.');
-    if (l.status !== 'available') throw new Error('Sản phẩm này đang được giữ hoặc đã giao dịch.');
-    l.status = 'reserved';
-    l.reservedBy = me.id;
-    l.reservedUntil = Date.now() + (hours || 24) * H;
-    l.meetPoint = meetPoint;
-    notify(l.seller, 'deal', `${me.name} đã đặt giữ “${l.title}” – hẹn tại ${meetPoint}.`, '#/item/' + l.id);
-    persist();
-    const conv = startConversation(id);
-    sendMessage(conv.id, `📌 Mình đã đặt giữ "${l.title}". Hẹn gặp tại: ${meetPoint}.`);
-    return l;
-  }
-
-  // DELETE /listings/:id/reserve
-  function cancelReservation(id) {
-    const me = currentUser();
-    const l = raw(id);
-    if (!me || (l.reservedBy !== me.id && l.seller !== me.id)) throw new Error('Không có quyền.');
-    notify(me.id === l.seller ? l.reservedBy : l.seller, 'deal', `${me.name} đã hủy giữ chỗ “${l.title}”.`, '#/item/' + l.id);
-    l.status = 'available'; l.reservedBy = null; l.reservedUntil = 0; l.meetPoint = '';
-    persist();
-  }
-
-  // POST /listings/:id/complete
-  function markSold(id, buyerId) {
+  // POST /listings/:id/sold — chỉ người bán xác nhận đã bán / đã cho tặng / đã trao đổi
+  function markSold(id) {
     const l = raw(id);
     assertOwner(l);
     l.status = 'sold';
-    l.soldTo = buyerId || l.reservedBy || null;
     l.soldAt = Date.now();
-    l.reservedUntil = 0;
-    if (l.soldTo) notify(l.soldTo, 'review', `Giao dịch “${l.title}” đã hoàn tất. Hãy đánh giá người bán để xây dựng uy tín cộng đồng.`, '#/reviews');
     persist();
   }
 
+  // POST /listings/:id/reopen
   function reopen(id) {
     const l = raw(id);
     assertOwner(l);
-    l.status = 'available'; l.soldTo = null; l.reservedBy = null; l.meetPoint = '';
+    l.status = 'available'; l.renewedAt = Date.now(); l.soldAt = 0;
+    persist();
+  }
+
+  // POST /listings/:id/renew — gia hạn miễn phí, không trừ hạn mức tin
+  function renew(id) {
+    const l = raw(id);
+    assertOwner(l);
+    if (l.status !== 'available' && l.status !== 'expired') throw new Error('Tin này không gia hạn được.');
+    l.status = 'available'; l.renewedAt = Date.now(); l.expiredAt = 0;
     persist();
   }
 
@@ -394,8 +340,8 @@ window.api = (function () {
   }
 
   /*
-   * POST /payments  — thanh toán mô phỏng
-   * kind: 'posts' (mua thêm tin) | 'bump' (đẩy tin) | 'featured' (tin nổi bật) | 'partner' | 'banner'
+   * POST /payments — thu qua chuyển khoản; lượt đăng / hiển thị chỉ kích hoạt khi khoản thu được xác nhận.
+   * Bản demo xác nhận ngay. kind: 'posts' | 'bump' | 'featured' | 'banner'
    */
   function pay(kind, opts) {
     const me = currentUser();
@@ -408,23 +354,21 @@ window.api = (function () {
       me.postCredits = (me.postCredits || 0) + P.extraPosts.posts;
     } else if (kind === 'bump') {
       l = raw(opts.listingId); assertOwner(l);
-      amount = P.bump.price; desc = 'Đẩy tin lên đầu';
+      amount = P.bump.price; desc = 'Đẩy tin lên đầu mục Mới đăng';
       l.bumpedAt = Date.now();
     } else if (kind === 'featured') {
       l = raw(opts.listingId); assertOwner(l);
-      amount = P.featured.price; desc = `Tin nổi bật ${P.featured.days} ngày`;
+      amount = P.featured.price; desc = `Tin ưu tiên ${P.featured.days} ngày`;
       l.boostUntil = Math.max(Date.now(), l.boostUntil || 0) + P.featured.days * D;
-    } else if (kind === 'partner') {
-      amount = P.partner.price; desc = 'Gói đối tác cửa hàng 1 tháng' + (opts.shop ? ` – ${opts.shop}` : '');
-      db.serviceRequests.push({ id: uid('sr'), type: 'partner', at: Date.now(), by: me.id, shop: opts.shop || '', phone: opts.phone || '' });
     } else if (kind === 'banner') {
-      const weeks = Number(opts.weeks) || 1;
-      amount = P.banner.price * weeks; desc = `Banner ${opts.side === 'right' ? 'bên phải' : 'bên trái'} ${weeks} tuần` + (opts.shop ? ` – ${opts.shop}` : '');
-      db.serviceRequests.push({ id: uid('sr'), type: 'banner', at: Date.now(), by: me.id, side: opts.side, weeks, shop: opts.shop || '' });
+      const months = Number(opts.months) || 1;
+      amount = P.banner.price * months;
+      desc = `Banner đối tác ${opts.side === 'right' ? 'bên phải' : 'bên trái'} ${months} tháng` + (opts.shop ? ` – ${opts.shop}` : '');
+      db.bannerRequests.push({ id: uid('bn'), at: Date.now(), by: me.id, side: opts.side, months, shop: opts.shop || '', phone: opts.phone || '' });
     } else throw new Error('Gói không hợp lệ.');
-    const p = { id: uid('p'), user: me.id, kind, amount, method: opts.method || 'MoMo', listingId: l ? l.id : null, desc, at: Date.now() };
+    const p = { id: uid('p'), user: me.id, kind, amount, method: 'Chuyển khoản', listingId: l ? l.id : null, desc, at: Date.now() };
     db.payments.push(p);
-    notify(me.id, 'pay', `Thanh toán thành công ${amount.toLocaleString('vi-VN')}đ – ${desc}${l ? ` cho “${l.title}”` : ''}.`, l ? '#/item/' + l.id : '#/me?tab=payments');
+    notify(me.id, 'pay', `Đã xác nhận chuyển khoản ${amount.toLocaleString('vi-VN')}đ – ${desc}${l ? ` cho “${l.title}”` : ''}.`, l ? '#/item/' + l.id : '#/me?tab=payments');
     persist();
     return p;
   }
@@ -433,9 +377,9 @@ window.api = (function () {
     return me ? db.payments.filter(p => p.user === me.id).sort((a, b) => b.at - a.at) : [];
   }
 
-  // Tin nổi bật (đã trả phí) trong cụm
-  function featuredListings(clusterId) {
-    return searchListings({ cluster: clusterId, sort: 'priority' }).filter(l => l.boosted);
+  // Tin ưu tiên (đã trả phí) đang hiển thị
+  function featuredListings() {
+    return searchListings({ sort: 'priority' }).filter(l => l.boosted);
   }
 
   // ---------- Thông báo ----------
@@ -448,13 +392,23 @@ window.api = (function () {
   function notifications() {
     const me = currentUser();
     if (!me) return [];
-    // Nhắc tin nổi bật sắp hết hạn (< 24 giờ)
+    expireListings();
     let changed = false;
     db.listings.forEach(l => {
-      if (l.seller === me.id && isBoosted(l) && l.boostUntil - Date.now() < D) {
+      if (l.seller !== me.id) return;
+      // Nhắc tin ưu tiên sắp hết hạn (< 24 giờ)
+      if (isBoosted(l) && l.boostUntil - Date.now() < D) {
         const key = 'exp' + l.id + l.boostUntil;
         if (!db.notifications.some(n => n.key === key)) {
-          db.notifications.push({ id: uid('n'), key, to: me.id, kind: 'system', text: `Tin nổi bật “${l.title}” sắp hết hạn. Gia hạn ${ref.pricing.featured.price.toLocaleString('vi-VN')}đ/${ref.pricing.featured.days} ngày để giữ vị trí.`, link: '#/item/' + l.id, at: Date.now(), read: false });
+          db.notifications.push({ id: uid('n'), key, to: me.id, kind: 'system', text: `Tin ưu tiên “${l.title}” sắp hết hạn. Gia hạn ${ref.pricing.featured.price.toLocaleString('vi-VN')}đ/${ref.pricing.featured.days} ngày để giữ vị trí.`, link: '#/item/' + l.id, at: Date.now(), read: false });
+          changed = true;
+        }
+      }
+      // Nhắc tin sắp tự ẩn (còn < 3 ngày)
+      if (l.status === 'available' && expiresAt(l) - Date.now() < 3 * D) {
+        const key = 'soon' + l.id + refreshedAt(l);
+        if (!db.notifications.some(n => n.key === key)) {
+          db.notifications.push({ id: uid('n'), key, to: me.id, kind: 'status', text: `Tin “${l.title}” sẽ tự ẩn sau ít ngày nữa. Gia hạn miễn phí nếu món đồ vẫn còn, hoặc đánh dấu đã bán.`, link: '#/me', at: Date.now(), read: false });
           changed = true;
         }
       }
@@ -468,34 +422,106 @@ window.api = (function () {
     persist();
   }
 
+  // ---------- Báo cáo & kiểm duyệt ----------
   // POST /listings/:id/report
   function report(id, reason, note) {
     const me = currentUser();
-    db.reports.push({ id: uid('rp'), listingId: id, by: me ? me.id : null, reason, note, at: Date.now() });
-    if (me) notify(me.id, 'system', `Đã nhận báo cáo “${reason}”. Đội kiểm duyệt sẽ xử lý trong 24 giờ.`, '#/item/' + id);
+    if (!me) throw new Error('Đăng nhập để gửi báo cáo.');
+    const l = raw(id);
+    db.reports.push({ id: uid('rp'), listingId: id, by: me.id, reason, note: (note || '').trim(), at: Date.now(), status: 'open' });
+    notify(me.id, 'report', `Đã nhận báo cáo “${reason}”. Đội kiểm duyệt sẽ xử lý trong vòng 24 giờ.`, '#/item/' + id);
+    db.users.filter(isAdmin).forEach(a => notify(a.id, 'report', `Báo cáo mới: “${l.title}” – ${reason}.`, '#/admin'));
     persist();
   }
 
-  function myReservations() {
-    const me = currentUser();
-    if (!me) return [];
-    return db.listings.filter(l => l.reservedBy === me.id && l.status === 'reserved')
-      .concat(db.listings.filter(l => l.soldTo === me.id && l.status === 'sold'));
+  function assertAdmin() {
+    if (!isAdmin(currentUser())) throw new Error('Chỉ quản trị viên mới thực hiện được thao tác này.');
+    return currentUser();
   }
 
-  // GET /clusters/:id/moving-sellers
-  function movingSellers(clusterId) {
-    return db.users
-      .filter(u => u.cluster === clusterId && u.moving && u.moving.date > Date.now() - D)
-      .map(u => ({ user: u, listings: searchListings({ cluster: clusterId, seller: u.id, moving: true }) }))
-      .filter(x => x.listings.length)
-      .sort((a, b) => a.user.moving.date - b.user.moving.date);
+  // GET /admin/reports
+  function adminReports() {
+    assertAdmin();
+    expireListings();
+    return db.reports.slice().sort((a, b) => (a.status === 'open') === (b.status === 'open') ? b.at - a.at : (a.status === 'open' ? -1 : 1))
+      .map(r => Object.assign({}, r, { listing: db.listings.find(l => l.id === r.listingId) || null, reporter: getUser(r.by) }));
   }
 
-  // POST /service-requests (dịch vụ thanh lý phòng trọ)
-  function requestService(data) {
-    db.serviceRequests.push(Object.assign({ id: uid('sr'), at: Date.now(), by: (currentUser() || {}).id }, data));
+  // Số lần tin của người bán bị gỡ hoặc bị yêu cầu chỉnh sửa
+  function violationCount(userId) {
+    return db.reports.filter(r => r.status === 'resolved' && r.action !== 'dismiss' && (db.listings.find(l => l.id === r.listingId) || {}).seller === userId).length;
+  }
+
+  /*
+   * POST /admin/reports/:id — action: 'edit' (ẩn tạm, yêu cầu chỉnh sửa) | 'remove' (gỡ tin) | 'dismiss' (không vi phạm)
+   * restrict: hạn chế quyền đăng tin của người bán khi tái phạm
+   */
+  function moderate(reportId, action, modNote, restrict) {
+    const admin = assertAdmin();
+    const r = db.reports.find(x => x.id === reportId);
+    if (!r) throw new Error('Không tìm thấy báo cáo.');
+    const l = db.listings.find(x => x.id === r.listingId);
+    const now = Date.now();
+    const note = (modNote || '').trim();
+    // Xử lý luôn các báo cáo khác đang mở của cùng tin
+    db.reports.filter(x => x.listingId === r.listingId && x.status === 'open').forEach(x => {
+      Object.assign(x, { status: 'resolved', action, handledBy: admin.id, handledAt: now, modNote: note });
+      if (x.by) notify(x.by, 'report', action === 'dismiss'
+        ? `Báo cáo về “${l ? l.title : 'tin đăng'}” đã được kiểm tra: chưa phát hiện vi phạm.`
+        : `Cảm ơn bạn! Tin “${l ? l.title : ''}” đã được ${action === 'remove' ? 'gỡ' : 'ẩn để người bán chỉnh sửa'}.`, '#/notifications');
+    });
+    if (l && action !== 'dismiss') {
+      l.status = action === 'remove' ? 'removed' : 'hidden';
+      l.modNote = note || (action === 'remove' ? 'Vi phạm quy định cộng đồng.' : 'Thông tin chưa đúng quy định, cần chỉnh sửa.');
+      notify(l.seller, 'report', action === 'remove'
+        ? `Tin “${l.title}” đã bị gỡ: ${l.modNote}`
+        : `Tin “${l.title}” đang bị ẩn: ${l.modNote} Sửa tin để hiển thị lại.`, '#/me');
+    }
+    if (l && restrict) {
+      const seller = getUser(l.seller);
+      if (seller) { seller.restricted = true; notify(seller.id, 'report', 'Tài khoản của bạn bị hạn chế đăng tin do vi phạm quy định nhiều lần.', '#/me'); }
+    }
     persist();
+  }
+
+  // POST /admin/listings/:id/restore
+  function restoreListing(id) {
+    assertAdmin();
+    const l = raw(id);
+    l.status = 'available'; l.modNote = ''; l.renewedAt = Date.now();
+    notify(l.seller, 'report', `Tin “${l.title}” đã được khôi phục hiển thị.`, '#/item/' + l.id);
+    persist();
+  }
+
+  // PATCH /admin/users/:id
+  function setRestricted(userId, value) {
+    assertAdmin();
+    const u = getUser(userId);
+    if (!u) throw new Error('Không tìm thấy người dùng.');
+    u.restricted = !!value;
+    notify(u.id, 'report', value ? 'Tài khoản của bạn bị hạn chế đăng tin do vi phạm quy định.' : 'Tài khoản của bạn đã được mở lại quyền đăng tin.', '#/me');
+    persist();
+  }
+
+  // Danh sách tin đang bị ẩn / gỡ (cho trang quản trị)
+  function moderatedListings() {
+    assertAdmin();
+    return db.listings.filter(l => l.status === 'hidden' || l.status === 'removed').map(l => decorate(l, null));
+  }
+
+  function adminStats() {
+    assertAdmin();
+    const done = db.reports.filter(r => r.status === 'resolved' && r.handledAt);
+    const within = done.filter(r => r.handledAt - r.at <= D).length;
+    const avgH = done.length ? done.reduce((s, r) => s + (r.handledAt - r.at), 0) / done.length / H : 0;
+    return {
+      open: db.reports.filter(r => r.status === 'open').length,
+      resolved: done.length,
+      within24: done.length ? Math.round(within / done.length * 100) : 100,
+      avgHours: Math.round(avgH * 10) / 10,
+      activeListings: db.listings.filter(l => l.status === 'available').length,
+      restricted: db.users.filter(u => u.restricted).length,
+    };
   }
 
   // ---------- Tin nhắn ----------
@@ -542,6 +568,9 @@ window.api = (function () {
     return c;
   }
 
+  // Tín hiệu có thể đã giao dịch: người mua hẹn gặp / chốt mua trong tin nhắn
+  const DEAL_SIGNAL = /(gặp|hẹn|qua .{0,25}(xem|lấy)|lấy luôn|chốt|em lấy|mình lấy|chuyển khoản)/i;
+
   // POST /conversations/:id/messages
   function sendMessage(convId, text) {
     const me = currentUser();
@@ -550,6 +579,11 @@ window.api = (function () {
     c.messages.push({ from: me.id, text: text.trim(), at: Date.now() });
     c.readBy = c.readBy || {};
     c.readBy[me.id] = Date.now();
+    const l = db.listings.find(x => x.id === c.listingId);
+    if (l && me.id !== l.seller && !c.reminded && DEAL_SIGNAL.test(text)) {
+      c.reminded = true;
+      notify(l.seller, 'status', `${me.name} vừa hẹn gặp về “${l.title}”. Nếu đã bán hoặc cho tặng, hãy cập nhật trạng thái để người khác không hỏi nữa.`, '#/item/' + l.id);
+    }
     persist();
   }
 
@@ -570,8 +604,7 @@ window.api = (function () {
     let text = autoReplies[Math.floor(Math.random() * autoReplies.length)];
     if (t.includes('bớt') || t.includes('giảm')) text = autoReplies[1];
     else if (t.includes('còn')) text = autoReplies[0];
-    else if (t.includes('đặt giữ')) text = 'Ok bạn, mình giữ cho bạn nhé. Đến nơi nhắn mình.';
-    else if (t.includes('ở đâu') || t.includes('gặp')) text = 'Mình ở ' + (ref.area(getUser(other).cluster, getUser(other).area) || {}).name + ', gặp ở cổng trường cho tiện nha.';
+    else if (t.includes('ở đâu') || t.includes('gặp')) text = 'Mình ở ' + ((ref.area('hoalac', (getUser(other) || {}).area) || {}).name || 'Hòa Lạc') + ', gặp ở chỗ đông người cho tiện nha.';
     c.messages.push({ from: other, text, at: Date.now() });
     persist();
   }
@@ -582,25 +615,24 @@ window.api = (function () {
     localStorage.removeItem(SESSION_KEY);
   }
 
-  function stats(clusterId) {
-    const ls = db.listings.filter(l => l.cluster === clusterId);
+  function stats() {
+    expireListings();
+    const ls = db.listings;
     return {
-      active: ls.filter(l => l.status !== 'sold').length,
-      free: ls.filter(l => l.type === 'free' && l.status !== 'sold').length,
-      verifiedUsers: db.users.filter(u => u.cluster === clusterId && u.verified.student).length,
+      active: ls.filter(l => l.status === 'available').length,
+      free: ls.filter(l => l.type === 'free' && l.status === 'available').length,
+      users: db.users.filter(u => !isAdmin(u)).length,
       done: ls.filter(l => l.status === 'sold').length,
     };
   }
 
   return {
-    ref, currentUser, login, loginAs, logout, register, updateProfile,
-    verifyStudentEmail, verifyStudentCard, verifyPhone,
-    activeClusterId, setActiveCluster,
-    getUser, allUsers, reviewsFor, reviewsBy, recentReviews, rating, pendingReviews, addReview,
+    ref, currentUser, isAdmin, login, loginAs, logout, register, verifyEmail, updateProfile,
+    activeClusterId, getUser, allUsers,
     searchListings, getListing, createListing, updateListing, deleteListing, featuredListings,
-    reserve, cancelReservation, markSold, reopen, report, myReservations,
-    quota, pay, myPayments, notifications, unreadNotifications, markNotificationsRead,
-    movingSellers, requestService,
+    markSold, reopen, renew, report, quota, pay, myPayments,
+    notifications, unreadNotifications, markNotificationsRead,
+    adminReports, moderate, restoreListing, setRestricted, moderatedListings, adminStats, violationCount,
     conversations, getConversation, unreadCount, totalUnread, markRead, startConversation, sendMessage, simulateReply,
     resetDemo, stats,
   };

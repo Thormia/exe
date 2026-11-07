@@ -2,6 +2,8 @@
 (function () {
   const $app = document.getElementById('app');
   const R = api.ref;
+  const P = R.pricing;
+  const CID = 'hoalac';
 
   // ---------- Tiện ích ----------
   function esc(s) {
@@ -25,16 +27,20 @@
   }
   const fmtTime = t => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   const fmtDate = t => new Date(t).toLocaleDateString('vi-VN');
-  const areaName = (c, a) => (R.area(c, a) || {}).name || '';
+  const areaName = a => (R.area(CID, a) || {}).name || '';
   const qs = o => { const p = new URLSearchParams(); Object.entries(o).forEach(([k, v]) => { if (v !== '' && v != null && v !== false) p.set(k, v); }); const s = p.toString(); return s ? '?' + s : ''; };
   const go = h => { location.hash = h; };
 
   function priceLabel(l) {
-    if (l.type === 'free') return '<span class="price free">Miễn phí</span>';
+    if (l.type === 'free') return '<span class="price free">0đ · Cho tặng</span>';
     if (l.type === 'trade') return '<span class="price trade">Trao đổi</span>' + (l.price ? ` <small class="muted">hoặc ${money(l.price)}</small>` : '');
     return `<span class="price">${money(l.price)}</span>`;
   }
   const typeBadge = { sell: '<span class="badge b-sell">Bán</span>', trade: '<span class="badge b-trade">Trao đổi</span>', free: '<span class="badge b-free">Cho tặng</span>' };
+  const doneLabel = l => ({ sell: 'Đã bán', free: 'Đã cho tặng', trade: 'Đã trao đổi' }[l.type] || 'Đã bán');
+  const statusOverlay = l => ({
+    sold: doneLabel(l), expired: 'Đã tự ẩn', hidden: 'Đang bị ẩn', removed: 'Đã bị gỡ',
+  }[l.status]);
 
   function avatar(u, size) {
     if (!u) return '';
@@ -42,16 +48,12 @@
     let h = 0; for (const ch of u.id) h = (h * 31 + ch.charCodeAt(0)) % 360;
     return `<span class="avatar ${size || ''}" style="background:hsl(${h} 55% 45%)">${esc(initials)}</span>`;
   }
-  function stars(avg, count) {
-    if (!count) return '<span class="muted small">Chưa có đánh giá</span>';
-    const full = Math.round(avg);
-    return `<span class="stars">${'★'.repeat(full)}<span class="off">${'★'.repeat(5 - full)}</span></span> <span class="small">${avg.toFixed(1)} (${count})</span>`;
-  }
-  function verifiedBadge(u, compact) {
+  // Xác thực email chỉ để quản lý tài khoản, không phải cam kết an toàn giao dịch
+  function emailBadge(u) {
     if (!u) return '';
-    if (u.verified.student) return `<span class="vbadge ok" title="Đã xác thực sinh viên">✔${compact ? '' : ' Sinh viên đã xác thực'}</span>`;
-    if (u.verified.phone) return `<span class="vbadge mid" title="Đã xác thực số điện thoại">☎${compact ? '' : ' Đã xác thực SĐT'}</span>`;
-    return `<span class="vbadge no" title="Chưa xác thực">!${compact ? '' : ' Chưa xác thực'}</span>`;
+    return u.emailVerified
+      ? '<span class="vbadge ok" title="Xác thực email giúp quản lý tài khoản, không bảo đảm chất lượng giao dịch">✔ Email đã xác thực</span>'
+      : '<span class="vbadge no">Chưa xác thực email</span>';
   }
 
   function thumb(l, cls) {
@@ -62,23 +64,19 @@
 
   function card(l) {
     const seller = api.getUser(l.seller);
+    const ov = statusOverlay(l);
     return `<a class="card" href="#/item/${l.id}">
       <div class="card-img">
         ${thumb(l)}
-        <div class="card-badges">
-          ${typeBadge[l.type]}
-          ${l.combo && l.combo.length ? '<span class="badge b-combo">Combo</span>' : ''}
-          ${l.movingSale ? '<span class="badge b-moving">Thanh lý</span>' : ''}
-        </div>
-        ${l.boosted ? '<span class="badge b-boost corner">⚡ Nổi bật</span>' : ''}
-        ${l.status === 'reserved' ? '<div class="overlay">Đang được giữ</div>' : ''}
-        ${l.status === 'sold' ? '<div class="overlay">Đã giao dịch</div>' : ''}
+        <div class="card-badges">${typeBadge[l.type]}</div>
+        ${l.boosted ? '<span class="badge b-boost corner">⚡ Ưu tiên</span>' : ''}
+        ${ov ? `<div class="overlay">${ov}</div>` : ''}
       </div>
       <div class="card-body">
         <div class="card-title">${esc(l.title)}</div>
         <div>${priceLabel(l)}</div>
-        <div class="card-meta">📍 ${esc(areaName(l.cluster, l.area))} · ${l.distance != null ? l.distance + ' km' : ''}</div>
-        <div class="card-meta">${verifiedBadge(seller, true)} ${esc(seller ? seller.name : '')} · ${timeAgo(l.createdAt)}</div>
+        <div class="card-meta">📍 ${esc(areaName(l.area))} · ${l.distance != null ? l.distance + ' km' : ''}</div>
+        <div class="card-meta">${esc(seller ? seller.name : '')} · ${timeAgo(l.createdAt)}</div>
       </div>
     </a>`;
   }
@@ -121,21 +119,21 @@
   // ---------- Header ----------
   function renderHeader() {
     const me = api.currentUser();
-    const cl = R.cluster(api.activeClusterId());
+    const admin = api.isAdmin(me);
     const unread = api.totalUnread();
     const notifs = me ? api.notifications() : [];
     const unreadN = notifs.filter(n => !n.read).length;
     document.getElementById('header').innerHTML = `
       <div class="container header-inner">
         <a href="#/" class="logo"><span class="logo-mark">♻</span><span>ReMarket</span></a>
-        <button class="cluster-pill" id="clusterBtn" title="Đổi cụm giao dịch">📍 ${esc(cl.name)} <span class="caret">▾</span></button>
+        <a class="cluster-pill" href="#/search" title="ReMarket giai đoạn đầu phục vụ khu vực Hòa Lạc">📍 Hòa Lạc</a>
         <form class="search" id="headerSearch">
-          <input name="q" placeholder="Tìm bàn học, nồi cơm, giáo trình..." value="${esc(currentQuery().q || '')}" autocomplete="off">
+          <input name="q" placeholder="Tìm quạt, bàn học, tai nghe, giáo trình..." value="${esc(currentQuery().q || '')}" autocomplete="off">
           <button aria-label="Tìm">🔍</button>
         </form>
         <nav class="header-actions">
-          <a href="#/moving" class="hdr-link hide-sm">📦 Thanh lý</a>
-          <a href="#/pricing" class="hdr-link hide-sm">💎 Gói dịch vụ</a>
+          ${admin ? '<a href="#/admin" class="hdr-link">🛡 Kiểm duyệt</a>' : ''}
+          <a href="#/pricing" class="hdr-link hide-sm">💎 Bảng giá</a>
           ${me ? `<div class="menu-wrap">
             <button class="icon-btn" id="bellBtn" title="Thông báo">🔔${unreadN ? `<span class="dot">${unreadN}</span>` : ''}</button>
             <div class="menu notif-menu" id="bellMenu">
@@ -143,19 +141,16 @@
               ${notifs.length ? notifs.slice(0, 6).map(notifRow).join('') : '<div class="small muted pad">Chưa có thông báo.</div>'}
               <a href="#/notifications" class="menu-foot">Xem tất cả thông báo</a>
             </div></div>
-            <a href="#/reviews" class="icon-btn hide-sm" title="Đánh giá">⭐</a>
             <a href="#/chat" class="icon-btn hide-sm" title="Tin nhắn">💬${unread ? `<span class="dot">${unread}</span>` : ''}</a>` : ''}
-          <a href="#/post" class="btn primary hide-sm">+ Đăng tin</a>
+          ${admin ? '' : '<a href="#/post" class="btn primary hide-sm">+ Đăng tin</a>'}
           ${me ? `<div class="menu-wrap"><button class="avatar-btn" id="meBtn">${avatar(me)}</button>
             <div class="menu" id="meMenu">
               <div class="menu-head">${esc(me.name)}<div class="small muted">${esc(me.email)}</div></div>
-              <a href="#/me">Tin của tôi</a>
-              <a href="#/me?tab=reserved">Đang đặt giữ</a>
-              <a href="#/reviews">Đánh giá</a>
+              ${admin ? '<a href="#/admin">Kiểm duyệt báo cáo</a>' : `<a href="#/me">Tin của tôi</a>
+              <a href="#/me?tab=payments">Gói đã mua & thanh toán</a>`}
               <a href="#/notifications">Thông báo</a>
-              <a href="#/me?tab=payments">Gói đã mua & thanh toán</a>
               <a href="#/pricing">Bảng giá dịch vụ</a>
-              <a href="#/me?tab=account">Tài khoản & xác thực</a>
+              <a href="#/me?tab=account">Tài khoản</a>
               <a href="#/user/${me.id}">Trang cá nhân công khai</a>
               <button id="logoutBtn">Đăng xuất</button>
             </div></div>` : `<a href="#/login" class="btn ghost hide-sm">Đăng nhập</a>`}
@@ -167,7 +162,7 @@
       <a href="${me ? '#/notifications' : '#/login'}" data-nav="/notifications">🔔<span>Thông báo</span>${unreadN ? `<i class="dot">${unreadN}</i>` : ''}</a>
       <a href="#/post" class="post" data-nav="/post">＋<span>Đăng</span></a>
       <a href="#/chat" data-nav="/chat">💬<span>Tin nhắn</span>${unread ? `<i class="dot">${unread}</i>` : ''}</a>
-      <a href="${me ? '#/me' : '#/login'}" data-nav="/me">👤<span>Tôi</span></a>`;
+      <a href="${me ? (admin ? '#/admin' : '#/me') : '#/login'}" data-nav="${admin ? '/admin' : '/me'}">👤<span>${admin ? 'Kiểm duyệt' : 'Tôi'}</span></a>`;
     const p = currentPath();
     document.querySelectorAll('#bottomNav a').forEach(a => { if (a.dataset.nav === '/' ? p === '/' : p.startsWith(a.dataset.nav)) a.classList.add('active'); });
 
@@ -175,7 +170,6 @@
       e.preventDefault();
       go('/search' + qs({ q: e.target.q.value.trim() }));
     };
-    document.getElementById('clusterBtn').onclick = openClusterPicker;
     const meBtn = document.getElementById('meBtn');
     if (meBtn) {
       meBtn.onclick = e => { e.stopPropagation(); document.getElementById('bellMenu').classList.remove('open'); document.getElementById('meMenu').classList.toggle('open'); };
@@ -192,7 +186,7 @@
   }
   document.addEventListener('click', () => { ['meMenu', 'bellMenu'].forEach(id => { const m = document.getElementById(id); if (m) m.classList.remove('open'); }); });
 
-  const notifIcon = { deal: '📌', review: '⭐', pay: '💳', system: '📣' };
+  const notifIcon = { status: '📌', report: '🚩', pay: '💳', system: '📣' };
   function notifRow(n) {
     return `<a href="${esc(n.link || '#/notifications')}" class="notif ${n.read ? '' : 'unread'}" data-nid="${n.id}">
       <span class="notif-ic k-${n.kind}">${notifIcon[n.kind] || '🔔'}</span>
@@ -203,37 +197,16 @@
     root.querySelectorAll('[data-nid]').forEach(a => a.addEventListener('click', () => api.markNotificationsRead(a.dataset.nid)));
   }
 
-  function openClusterPicker() {
-    const cur = api.activeClusterId();
-    modal('Chọn cụm giao dịch', `
-      <p class="muted">Mỗi cụm là một chợ riêng để bạn chỉ thấy đồ ở gần, dễ giao nhận.</p>
-      <div class="cluster-choices">
-        ${R.clusters.map(c => `<button class="cluster-choice ${c.id === cur ? 'sel' : ''}" data-id="${c.id}">
-          <b>📍 ${c.name}</b><span>${c.tagline}</span></button>`).join('')}
-      </div>
-      ${api.currentUser() ? '<p class="small muted">Đổi cụm sẽ cập nhật trường và khu trọ mặc định trong hồ sơ của bạn.</p>' : ''}`,
-    (m, close) => {
-      m.querySelectorAll('.cluster-choice').forEach(b => b.onclick = () => {
-        api.setActiveCluster(b.dataset.id);
-        close();
-        toast('Đã chuyển sang cụm ' + R.cluster(b.dataset.id).name, 'ok');
-        render();
-      });
-    });
-  }
-
   // ---------- Trang chủ ----------
-  const P = R.pricing;
   let heroTimer = null;
   let maps = [];
 
-  // Thông tin liên hệ người bán: SĐT che bớt (bấm để hiện, như Chợ Tốt) + nút chat
+  // Liên hệ người bán: chat trên web; SĐT chỉ hiện khi người bán tự chọn hiển thị
   function sellerContact(u, listingId) {
-    const phone = u.phone && u.verified.phone ? u.phone : '';
+    const phone = u.phone && u.showPhone ? u.phone : '';
     return `<div class="contact">
-      ${phone ? `<button type="button" class="btn call" data-phone="${esc(phone)}">📞 <span>${esc(phone.slice(0, 4) + ' ' + phone.slice(4, 7))} ***</span><small>Bấm để hiện số</small></button>`
-        : '<div class="small muted">Người bán chưa xác thực SĐT – liên hệ qua chat.</div>'}
-      ${listingId ? `<button type="button" class="btn primary" data-chat="${listingId}">💬 Chat với người bán</button>` : ''}
+      ${listingId ? `<button type="button" class="btn primary" data-chat="${listingId}">💬 Nhắn tin người bán</button>` : ''}
+      ${phone ? `<button type="button" class="btn call" data-phone="${esc(phone)}">📞 <span>${esc(phone.slice(0, 4) + ' ' + phone.slice(4, 7))} ***</span><small>Bấm để hiện số</small></button>` : ''}
     </div>`;
   }
   function bindContact(root) {
@@ -250,34 +223,32 @@
     }));
   }
 
-  // Ô nổi bật: 1 ô lớn bằng 4 ô thường (2×2) kèm liên hệ người bán + 4 tin nổi bật khác
-  function featuredBlock(cid) {
+  // Ô tin ưu tiên: 1 ô lớn bằng 4 ô thường (2×2) + 4 tin ưu tiên khác
+  function featuredBlock() {
     const me = api.currentUser();
-    const fs = api.featuredListings(cid);
-    const cta = `<a href="#/pricing" class="feat-cta"><span class="pc-ic">⚡</span><b>Vị trí nổi bật còn trống</b><span class="small">Tin của bạn hiển thị ở đây chỉ ${money(P.featured.price)}/${P.featured.days} ngày</span><span class="btn small primary">Đăng ký ngay</span></a>`;
-    const head = `<div class="section-head"><h2>⚡ Tin nổi bật</h2><a href="#/pricing">Đưa tin lên đây – ${money(P.featured.price)}/${P.featured.days} ngày →</a></div>`;
+    const fs = api.featuredListings();
+    const cta = `<a href="#/pricing" class="feat-cta"><span class="pc-ic">⚡</span><b>Vị trí ưu tiên còn trống</b><span class="small">Tin của bạn hiển thị ở đây chỉ ${money(P.featured.price)}/${P.featured.days} ngày</span><span class="btn small primary">Xem bảng giá</span></a>`;
+    const head = `<div class="section-head"><h2>⚡ Tin ưu tiên</h2><a href="#/pricing">Đưa tin lên đây – ${money(P.featured.price)}/${P.featured.days} ngày →</a></div>`;
     if (!fs.length) return `<section class="section">${head}<div class="featured">${cta}</div></section>`;
     const big = fs[0];
     const small = fs.slice(1, 5);
     const s = api.getUser(big.seller);
-    const rt = api.rating(s.id);
-    const sold = api.searchListings({ cluster: cid, seller: s.id, includeSold: true }).filter(l => l.status === 'sold').length;
     const mine = me && me.id === s.id;
     return `<section class="section">${head}
       <div class="featured">
         <div class="feat-big">
           <a href="#/item/${big.id}" class="feat-img">
             ${thumb(big, 'feat')}
-            <div class="card-badges">${typeBadge[big.type]}${big.combo && big.combo.length ? '<span class="badge b-combo">Combo</span>' : ''}${big.movingSale ? '<span class="badge b-moving">Thanh lý</span>' : ''}</div>
-            <span class="badge b-boost corner">⚡ Nổi bật</span>
+            <div class="card-badges">${typeBadge[big.type]}</div>
+            <span class="badge b-boost corner">⚡ Ưu tiên</span>
           </a>
           <div class="feat-body">
             <a href="#/item/${big.id}" class="feat-title">${esc(big.title)}</a>
             <div class="feat-price">${priceLabel(big)}</div>
-            <div class="small muted">📍 ${esc(areaName(big.cluster, big.area))} · ~${big.distance} km · ${timeAgo(big.createdAt)}</div>
+            <div class="small muted">📍 ${esc(areaName(big.area))} · ~${big.distance} km · ${timeAgo(big.createdAt)}</div>
             ${big.desc ? `<p class="feat-desc">${esc(big.desc)}</p>` : ''}
             <div class="feat-seller">
-              <a href="#/user/${s.id}" class="fs-user">${avatar(s, 'lg')}<div><b>${esc(s.name)}</b> ${verifiedBadge(s, true)}<div>${stars(rt.avg, rt.count)}</div><div class="small muted">${esc(s.school)} · ${sold} đã giao dịch</div></div></a>
+              <a href="#/user/${s.id}" class="fs-user">${avatar(s, 'lg')}<div><b>${esc(s.name)}</b><div class="small muted">${esc(s.school)}</div></div></a>
               ${mine ? '<div class="small muted">Đây là tin của bạn.</div>' : sellerContact(s, big.id)}
             </div>
           </div>
@@ -288,38 +259,36 @@
     </section>`;
   }
 
-  // Quảng cáo banner: 2 bên (màn hình rộng) hoặc dải ngang (màn hình hẹp)
+  // Banner đối tác: tách khỏi danh mục tin C2C, gắn nhãn Quảng cáo
   function adCard(p) {
     return `<a href="#/pricing" class="ad-card" style="background:linear-gradient(160deg,${p.color[0]},${p.color[1]})">
       <span class="ad-tag">Quảng cáo · Đối tác</span><span class="ad-ic">${p.icon}</span>
       <b>${esc(p.ad)}</b><span class="ad-name">${esc(p.name)}</span><span class="ad-phone">☎ ${esc(p.phone)}</span></a>`;
   }
-  const adSlot = side => `<a href="#/pricing?banner=${side}" class="ad-slot"><b>🪧 Đặt banner tại đây</b><span>${money(P.banner.price)}/${P.banner.unit}</span><span class="small">160 × 600 px</span></a>`;
+  const adSlot = side => `<a href="#/pricing?banner=${side}" class="ad-slot"><b>🪧 Banner đối tác</b><span>${money(P.banner.price)}/${P.banner.unit}/vị trí</span><span class="small">160 × 600 px</span></a>`;
   function renderSideAds(show) {
-    const cid = api.activeClusterId();
-    const ps = R.partners.filter(p => p.cluster === cid && p.ad);
-    document.getElementById('adLeft').innerHTML = show ? (ps[0] ? adCard(ps[0]) : '') + adSlot('left') : '';
-    document.getElementById('adRight').innerHTML = show ? (ps[1] ? adCard(ps[1]) : '') + adSlot('right') : '';
+    const ps = R.advertisers;
+    document.getElementById('adLeft').innerHTML = show ? (ps[0] ? adCard(ps[0]) : adSlot('left')) : '';
+    document.getElementById('adRight').innerHTML = show ? (ps[1] ? adCard(ps[1]) : adSlot('right')) : '';
   }
-  function inlineAds(cid) {
-    const ps = R.partners.filter(p => p.cluster === cid && p.ad);
-    return `<div class="inline-ads">${ps.slice(0, 2).map(adCard).join('')}${adSlot('left')}</div>`;
+  function inlineAds() {
+    return `<div class="inline-ads">${R.advertisers.slice(0, 2).map(adCard).join('')}${adSlot('left')}</div>`;
   }
 
   // ---------- Bản đồ (Leaflet + OpenStreetMap) ----------
   function listingLatLng(l) {
-    const a = R.area(l.cluster, l.area);
+    const a = R.area(CID, l.area);
     if (!a || a.lat == null) return null;
     let h = 7; for (const ch of String(l.id)) h = (h * 131 + ch.charCodeAt(0)) % 1000003;
     return [a.lat + ((h % 97) / 97 - 0.5) * 0.004, a.lng + ((Math.floor(h / 97) % 89) / 89 - 0.5) * 0.004];
   }
   const gMapsEmbed = (q, z) => `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=${z || 14}&hl=vi&output=embed`;
   const gMapsLink = q => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
-  function mountMap(el, clusterId, listings, opts) {
+  function mountMap(el, listings, opts) {
     if (!el) return null;
     if (!window.L) { el.innerHTML = '<div class="map-fallback">🗺 Không tải được bản đồ – kiểm tra kết nối Internet.</div>'; return null; }
     opts = opts || {};
-    const cl = R.cluster(clusterId);
+    const cl = R.cluster(CID);
     const map = L.map(el, { scrollWheelZoom: false }).setView(opts.center || cl.center, opts.zoom || cl.zoom);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
     if (!opts.single) cl.areas.forEach(a => L.circle([a.lat, a.lng], { radius: 280, color: '#0f8a5f', weight: 1, fillOpacity: 0.07 }).addTo(map).bindTooltip(a.name));
@@ -330,7 +299,7 @@
       const cat = R.category(l.cat) || R.categories[0];
       L.marker(ll, { icon: L.divIcon({ className: 'pin' + (l.boosted ? ' hot' : ''), html: `<span style="background:${cat.color[1]}"><i>${cat.icon}</i></span>`, iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -30] }) })
         .addTo(map)
-        .bindPopup(`<a href="#/item/${l.id}" class="map-pop"><b>${esc(l.title)}</b><br>${priceLabel(l)}<br><small>📍 ${esc(areaName(l.cluster, l.area))}</small></a>`);
+        .bindPopup(`<a href="#/item/${l.id}" class="map-pop"><b>${esc(l.title)}</b><br>${priceLabel(l)}<br><small>📍 ${esc(areaName(l.area))}</small></a>`);
     });
     if (opts.single) L.circle(opts.center, { radius: 300, color: '#0f8a5f', weight: 1, fillOpacity: 0.1 }).addTo(map);
     maps.push(map);
@@ -339,35 +308,30 @@
 
   function viewHome() {
     const me = api.currentUser();
-    const cid = api.activeClusterId();
-    const cl = R.cluster(cid);
-    const st = api.stats(cid);
+    const cl = R.cluster(CID);
+    const st = api.stats();
     const near = api.searchListings({ sort: 'priority' }).slice(0, 6);
     const fresh = api.searchListings({ sort: 'new' }).slice(0, 6);
     const free = api.searchListings({ type: 'free', sort: 'near' }).slice(0, 4);
-    const movers = api.movingSellers(cid);
-    const pending = me ? api.pendingReviews() : [];
     const all = api.searchListings({});
-    const recent = api.recentReviews(cid, 6);
 
     const slides = [
-      ['s-green', `<h1>Đồ cũ sinh viên <span class="hl">${esc(cl.name)}</span>,<br>mua gần – bán nhanh – tặng dễ.</h1>
-        <p class="lead">Bán, trao đổi và cho tặng đồ dùng giữa sinh viên cùng trường, cùng khu trọ. Gặp trực tiếp, kiểm tra tận tay rồi mới trả tiền.</p>
+      ['s-green', `<h1>Đồ cũ ở <span class="hl">Hòa Lạc</span>,<br>tìm gần – bán nhanh – tặng dễ.</h1>
+        <p class="lead">Mua, bán, trao đổi và cho tặng đồ đã qua sử dụng giữa sinh viên, người đi làm và cư dân Hòa Lạc. Gặp trực tiếp, kiểm tra tận tay rồi mới trả tiền.</p>
         <div class="hero-stats">
-          <div><b>${st.active}</b><span>tin đang đăng</span></div>
+          <div><b>${st.active}</b><span>tin đang hiển thị</span></div>
           <div><b>${st.free}</b><span>món cho tặng</span></div>
-          <div><b>${st.verifiedUsers}</b><span>SV đã xác thực</span></div>
-          <div><b>${st.done}</b><span>giao dịch xong</span></div>
+          <div><b>${st.users}</b><span>người dùng</span></div>
+          <div><b>${st.done}</b><span>đã bán / cho tặng</span></div>
         </div>`],
-      ['s-orange', `<span class="slide-tag">Gói đăng tin</span><h2>${P.freePosts} tin đầu mỗi tháng miễn phí</h2>
-        <p class="lead">Cần đăng nhiều hơn? Chỉ <b>${money(P.extraPosts.price)} cho ${P.extraPosts.posts} tin</b>.</p><a href="#/post" class="btn light">+ Đăng tin ngay</a>`],
-      ['s-purple', `<span class="slide-tag">Tin nổi bật</span><h2>Lên ô lớn trang chủ chỉ ${money(P.featured.price)}/${P.featured.days} ngày</h2>
-        <p class="lead">Hiển thị kèm số điện thoại của bạn, ưu tiên đầu kết quả tìm kiếm. Đẩy tin chỉ ${money(P.bump.price)}/lượt.</p><a href="#/pricing" class="btn light">Xem bảng giá</a>`],
-      ['s-red', `<span class="slide-tag">Thanh lý chuyển trọ</span><h2>Sắp chuyển phòng hay ra trường?</h2>
-        <p class="lead">Đăng cả combo đồ phòng, người mua ngay gần qua lấy – không phải vận chuyển, không phải bỏ lại.</p><a href="#/moving" class="btn light">📦 Vào khu thanh lý</a>`],
+      ['s-orange', `<span class="slide-tag">Đăng tin</span><h2>${P.freePosts} tin đầu mỗi tháng miễn phí</h2>
+        <p class="lead">Cần đăng nhiều hơn? Chỉ <b>${money(P.extraPosts.price)} cho ${P.extraPosts.posts} tin</b>. ReMarket không thu hoa hồng trên giá món đồ.</p><a href="#/post" class="btn light">+ Đăng tin ngay</a>`],
+      ['s-purple', `<span class="slide-tag">Tin ưu tiên</span><h2>Hiển thị nổi bật chỉ ${money(P.featured.price)}/${P.featured.days} ngày</h2>
+        <p class="lead">Lên ô lớn trang chủ và đầu kết quả tìm kiếm. Đẩy tin lên đầu mục Mới đăng chỉ ${money(P.bump.price)}/lượt.</p><a href="#/pricing" class="btn light">Xem bảng giá</a>`],
     ];
     const byArea = {};
     all.forEach(l => { byArea[l.area] = (byArea[l.area] || 0) + 1; });
+    const q = me ? api.quota() : null;
 
     return `
     <div class="container">
@@ -379,14 +343,14 @@
         </div>
         <div class="hero-card">
           ${me ? `<div class="hc-user">${avatar(me, 'lg')}<div><b>Chào ${esc(me.name.split(' ').pop())}!</b>
-            <div class="small">${esc(me.school)} · ${esc(areaName(me.cluster, me.area))}</div>${verifiedBadge(me)}</div></div>
-            ${!me.verified.student ? '<a href="#/me?tab=account" class="notice warn">Xác thực sinh viên để tăng độ tin cậy cho tin đăng của bạn →</a>' : ''}
-            ${pending.length ? `<a href="#/reviews" class="notice">⭐ Bạn có ${pending.length} giao dịch chưa đánh giá →</a>` : ''}
-            ${(() => { const q = api.quota(); return `<div class="small muted">📝 Còn <b>${q.freeLeft}/${P.freePosts}</b> tin miễn phí tháng này${q.credits ? ` · ${q.credits} lượt đã mua` : ''}</div>`; })()}
+            <div class="small">${esc(me.school)} · ${esc(areaName(me.area))}</div>${emailBadge(me)}</div></div>
+            ${!me.emailVerified ? '<a href="#/verify" class="notice warn">Xác thực email để bắt đầu đăng tin →</a>' : ''}
+            ${api.isAdmin(me) ? `<a href="#/admin" class="btn primary block">🛡 Vào trang kiểm duyệt</a>` : `
+            <div class="small muted">📝 Còn <b>${q.freeLeft}/${P.freePosts}</b> tin miễn phí tháng này${q.credits ? ` · ${q.credits} lượt đã mua` : ''}</div>
             <a href="#/post" class="btn primary block">+ Đăng tin mới</a>
-            <a href="#/moving" class="btn ghost block">📦 Tôi sắp chuyển trọ</a>`
+            <a href="#/me" class="btn ghost block">Quản lý tin của tôi</a>`}`
           : `<h3>Bắt đầu trong 1 phút</h3>
-            <ol class="steps-mini"><li>Đăng ký, chọn cụm ${esc(cl.name)}</li><li>Xác thực sinh viên</li><li>Đăng ${P.freePosts} tin miễn phí mỗi tháng</li></ol>
+            <ol class="steps-mini"><li>Đăng ký bằng email, không bắt buộc email trường</li><li>Xác thực email</li><li>Đăng ${P.freePosts} tin miễn phí mỗi tháng</li></ol>
             <a href="#/register" class="btn primary block">Tạo tài khoản</a>
             <a href="#/login" class="btn ghost block">Đăng nhập</a>`}
         </div>
@@ -398,30 +362,25 @@
         <a href="#/search${qs({ type: 'trade' })}" class="cat"><span class="cat-ic" style="background:#fef3c7">🔁</span><span>Trao đổi</span></a>
       </section>
 
-      ${movers.length ? `<a href="#/moving" class="moving-banner">
-        <div><b>📦 ${movers.length} bạn đang thanh lý chuyển trọ</b>
-        <div>Mua theo combo rẻ hơn mua lẻ · Người gần nhất chuyển đi trong ${timeLeft(movers[0].user.moving.date)}</div></div>
-        <span class="btn light">Xem ngay →</span></a>` : ''}
+      ${featuredBlock()}
 
-      ${featuredBlock(cid)}
-
-      ${inlineAds(cid)}
+      ${inlineAds()}
 
       <div class="duo">
         <section class="section">
           <div class="section-head"><h2>📍 Gợi ý gần bạn</h2><a href="#/search${qs({ sort: 'priority' })}">Xem tất cả →</a></div>
-          <p class="muted small sub">Ưu tiên tin nổi bật, cùng khu trọ, cùng trường và khoảng cách gần.</p>
+          <p class="muted small sub">Ưu tiên tin ưu tiên, cùng khu trọ, cùng trường và khoảng cách gần.</p>
           ${grid(near)}
         </section>
         <section class="section">
           <div class="section-head"><h2>🆕 Mới đăng</h2><a href="#/search${qs({ sort: 'new' })}">Xem tất cả →</a></div>
-          <p class="muted small sub">Tin vừa đăng hoặc vừa được đẩy lên trong cụm ${esc(cl.name)}.</p>
+          <p class="muted small sub">Tin vừa đăng hoặc vừa được đẩy lên.</p>
           ${grid(fresh)}
         </section>
       </div>
 
       <section class="section">
-        <div class="section-head"><h2>🗺 Bản đồ đồ cũ khu ${esc(cl.name)}</h2><span class="small muted">${esc(cl.address || '')}</span></div>
+        <div class="section-head"><h2>🗺 Bản đồ đồ cũ khu Hòa Lạc</h2><span class="small muted">${esc(cl.address)}</span></div>
         <div class="map-wrap">
           <div class="map-main">
             <div class="seg map-tabs">
@@ -429,49 +388,37 @@
               <label><input type="radio" name="mapTab" value="google"><span>🌏 Google Maps</span></label>
             </div>
             <div id="homeMap" class="map"></div>
-            <iframe id="gMap" class="map gmap" hidden title="Google Maps khu ${esc(cl.name)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+            <iframe id="gMap" class="map gmap" hidden title="Google Maps khu Hòa Lạc" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
           </div>
           <aside class="map-side">
             <b>Khu trọ / KTX</b>
             ${cl.areas.map(a => `<button class="area-row" data-area="${a.id}"><span>📍 ${esc(a.name)}</span><span class="count">${byArea[a.id] || 0} tin</span></button>`).join('')}
-            <a id="gMapLink" class="btn ghost block small" href="${gMapsLink(cl.address || cl.name)}" target="_blank" rel="noopener">Mở trong Google Maps ↗</a>
+            <a id="gMapLink" class="btn ghost block small" href="${gMapsLink(cl.address)}" target="_blank" rel="noopener">Mở trong Google Maps ↗</a>
             <p class="small muted">Vị trí trên bản đồ là gần đúng theo khu vực, không phải địa chỉ chính xác của người bán.</p>
           </aside>
         </div>
       </section>
 
       ${free.length ? `<section class="section">
-        <div class="section-head"><h2>🎁 Cho tặng miễn phí</h2><a href="#/search${qs({ type: 'free' })}">Xem tất cả →</a></div>
+        <div class="section-head"><h2>🎁 Cho tặng 0đ</h2><a href="#/search${qs({ type: 'free' })}">Xem tất cả →</a></div>
         ${grid(free)}
       </section>` : ''}
 
-      ${recent.length ? `<section class="section">
-        <div class="section-head"><h2>⭐ Đánh giá người bán gần đây</h2><a href="#/reviews">Đánh giá của bạn →</a></div>
-        <p class="muted small sub">Người mua và người bán chấm điểm nhau sau mỗi giao dịch – xem ai uy tín trước khi hẹn gặp.</p>
-        <div class="rev-strip">${recent.map(r => {
-          const a = api.getUser(r.from), b = api.getUser(r.to);
-          const item = reviewItem(r);
-          return `<a href="#/user/${b.id}" class="rev-card"><div class="rev-top">${avatar(a, 'sm')}<span class="small"><b>${esc(a.name)}</b> → ${esc(b.name)}</span></div>
-            <span class="stars">${'★'.repeat(r.stars)}<span class="off">${'★'.repeat(5 - r.stars)}</span></span><p>“${esc(r.text)}”</p>
-            ${item ? `<span class="rev-item small">🛍 Giao dịch: ${esc(item)}</span>` : ''}<span class="small muted">${timeAgo(r.createdAt)}</span></a>`;
-        }).join('')}</div>
-      </section>` : ''}
-
       <section class="section">
-        <div class="section-head"><h2>💎 Gói dịch vụ</h2><a href="#/pricing">Xem bảng giá chi tiết →</a></div>
+        <div class="section-head"><h2>💎 Dịch vụ trả phí</h2><a href="#/pricing">Xem bảng giá chi tiết →</a></div>
         ${pricingCards()}
       </section>
 
       <section class="section how">
-        <h2>Sàn hoạt động thế nào?</h2>
+        <h2>ReMarket hoạt động thế nào?</h2>
         <div class="how-grid">
           ${[
-            ['📝', 'Đăng ký & chọn cụm', 'Chọn Hòa Lạc hoặc Cầu Giấy, xác thực email/thẻ sinh viên.'],
-            ['📸', 'Đăng tin chuẩn', `Ảnh, giá, tình trạng, vị trí. ${P.freePosts} tin miễn phí mỗi tháng.`],
-            ['🔎', 'Tìm đồ gần', 'Lọc theo trường, khu trọ, danh mục, giá, xem trên bản đồ.'],
-            ['💬', 'Nhắn tin & đặt giữ', 'Thương lượng, đặt giữ và hẹn điểm gặp công khai.'],
-            ['🤝', 'Gặp & kiểm tra', 'Xem hàng tận tay rồi mới trả tiền.'],
-            ['⭐', 'Đánh giá nhau', 'Cập nhật đã giao dịch và đánh giá để xây dựng uy tín.'],
+            ['📝', 'Đăng ký bằng email', 'Sinh viên, người đi làm hay cư dân đều dùng được, chỉ cần xác thực email.'],
+            ['📸', 'Đăng tin chuẩn', `Ảnh thật, giá, tình trạng, lỗi nếu có, khu vực. Tin hiển thị ngay, kiểm duyệt sau.`],
+            ['🔎', 'Tìm đồ gần', 'Lọc theo khu trọ, danh mục, giá, tình trạng; xem trên bản đồ.'],
+            ['💬', 'Nhắn tin, hẹn gặp', 'Hai bên tự thỏa thuận chỗ gặp, cách kiểm tra và thanh toán.'],
+            ['🤝', 'Kiểm tra rồi trả tiền', 'ReMarket không giữ tiền, không giao hàng. Không chuyển cọc cho người lạ.'],
+            ['✔', 'Cập nhật đã bán', `Chỉ người bán đổi trạng thái. Tin không cập nhật sau ${R.listingDays} ngày sẽ tự ẩn.`],
           ].map(([i, t, d], n) => `<div class="how-step"><span class="how-n">${n + 1}</span><div class="how-ic">${i}</div><b>${t}</b><p>${d}</p></div>`).join('')}
         </div>
       </section>
@@ -498,13 +445,12 @@
     bindContact($app);
     bindBuy($app);
 
-    const cid = api.activeClusterId();
-    const cl = R.cluster(cid);
-    const map = mountMap(document.getElementById('homeMap'), cid, api.searchListings({}));
+    const cl = R.cluster(CID);
+    const map = mountMap(document.getElementById('homeMap'), api.searchListings({}));
     // Google Maps nhúng (iframe, không cần API key) — chỉ tải khi mở tab
     const gMap = document.getElementById('gMap');
     const gLink = document.getElementById('gMapLink');
-    let gQuery = { q: cl.address || cl.name, z: 14 };
+    let gQuery = { q: cl.address, z: 14 };
     const setG = (q, z) => {
       gQuery = { q, z };
       gLink.href = gMapsLink(q);
@@ -519,7 +465,7 @@
     });
     document.querySelectorAll('.area-row').forEach(b => b.onclick = () => {
       document.querySelectorAll('.area-row').forEach(x => x.classList.toggle('sel', x === b));
-      const a = R.area(cid, b.dataset.area);
+      const a = R.area(CID, b.dataset.area);
       setG(`${a.lat},${a.lng}`, 16);
       if (map) map.flyTo([a.lat, a.lng], 16);
       else if (gMap.hidden) go('/search' + qs({ area: a.id }));
@@ -529,106 +475,104 @@
   // ---------- Bảng giá & thanh toán ----------
   function pricingCards() {
     const items = [
-      ['📝', 'Đăng thêm tin', money(P.extraPosts.price), `/ ${P.extraPosts.posts} tin`, `${P.freePosts} tin đầu mỗi tháng miễn phí. Từ tin thứ ${P.freePosts + 1}, mua thêm theo gói.`, 'posts', 'Mua gói'],
-      ['🔝', 'Đẩy tin', money(P.bump.price), '/ lượt', 'Làm mới tin, đưa bài lên vị trí đầu mục “Mới đăng”.', 'bump', 'Chọn tin để đẩy'],
-      ['⚡', 'Tin nổi bật', money(P.featured.price), `/ ${P.featured.days} ngày`, 'Ô lớn trang chủ kèm thông tin liên hệ, ưu tiên đầu kết quả tìm kiếm.', 'featured', 'Chọn tin'],
-      ['🏪', 'Đối tác cửa hàng', money(P.partner.price), `/ ${P.partner.unit}`, 'Gắn nhãn đối tác, hiển thị cửa hàng/dịch vụ quanh khu trọ trong mục Đối tác.', 'partner', 'Đăng ký'],
-      ['🪧', 'Banner 2 bên', money(P.banner.price), `/ ${P.banner.unit}`, 'Banner dọc 160×600 hai bên trang chủ, tìm kiếm và chi tiết tin.', 'banner', 'Đặt banner'],
+      ['📝', 'Mua thêm tin', money(P.extraPosts.price), `/ gói ${P.extraPosts.posts} tin`, `${P.freePosts} tin đầu mỗi tháng miễn phí. Hết lượt thì mua thêm theo gói.`, 'posts', 'Mua gói'],
+      ['🔝', 'Đẩy tin', money(P.bump.price), '/ lượt', 'Làm mới tin, đưa bài lên đầu mục “Mới đăng”.', 'bump', 'Chọn tin để đẩy'],
+      ['⚡', 'Tin ưu tiên', money(P.featured.price), `/ ${P.featured.days} ngày`, 'Hiển thị nổi bật có thời hạn: ô lớn trang chủ và đầu kết quả tìm kiếm.', 'featured', 'Chọn tin'],
+      ['🪧', 'Banner đối tác', money(P.banner.price), `/ ${P.banner.unit} / vị trí`, 'Dành cho cửa hàng, doanh nghiệp địa phương. Quảng cáo nằm riêng, không lẫn vào tin đồ cũ.', 'banner', 'Đặt banner'],
     ];
     return `<div class="price-grid">${items.map(([ic, t, pr, unit, d, k, btn]) => `<div class="price-card ${k === 'featured' ? 'best' : ''}">
-      ${k === 'featured' ? '<em>Phổ biến</em>' : ''}<div class="pc-ic">${ic}</div><b>${t}</b>
+      <div class="pc-ic">${ic}</div><b>${t}</b>
       <div><span class="price">${pr}</span> <span class="muted small">${unit}</span></div>
       <p class="small muted">${d}</p>
       <button class="btn ${k === 'featured' ? 'primary' : 'ghost'} block small" data-buy="${k}">${btn}</button></div>`).join('')}</div>`;
   }
 
+  // Thu tiền dịch vụ bằng chuyển khoản; chỉ kích hoạt khi khoản thu được xác nhận (demo: xác nhận ngay)
   function openCheckout(desc, amount, onPaid) {
-    modal('💳 Thanh toán', `
+    const code = 'RM' + Date.now().toString().slice(-6);
+    modal('💳 Thanh toán chuyển khoản', `
       <div class="checkout-sum"><span>${esc(desc)}</span><b class="price">${money(amount)}</b></div>
-      <div class="radio-list">${['Ví MoMo', 'ZaloPay', 'VNPay QR', 'Chuyển khoản ngân hàng'].map((m, i) => `<label class="radio-row"><input type="radio" name="method" value="${m}" ${i ? '' : 'checked'}> ${m}</label>`).join('')}</div>
-      <button class="btn primary block" id="payBtn">Thanh toán ${money(amount)}</button>
-      <p class="small muted">* Thanh toán mô phỏng, không trừ tiền thật.</p>`, (m, close) => {
+      <div class="panel">
+        <div class="small muted">Chuyển khoản tới</div>
+        <b>Tài khoản ReMarket · [Ngân hàng] · [Số tài khoản]</b>
+        <div class="small">Nội dung chuyển khoản: <b>${code}</b></div>
+      </div>
+      <p class="small muted">Lượt đăng hoặc hiển thị chỉ được kích hoạt sau khi nhóm xác nhận khoản thu.</p>
+      <button class="btn primary block" id="payBtn">Tôi đã chuyển khoản ${money(amount)}</button>
+      <p class="small muted">* Bản demo: khoản thu được xác nhận ngay, không trừ tiền thật.</p>`, (m, close) => {
       const btn = m.querySelector('#payBtn');
       btn.onclick = () => {
-        const method = m.querySelector('input[name=method]:checked').value;
-        btn.disabled = true; btn.textContent = 'Đang xử lý...';
+        btn.disabled = true; btn.textContent = 'Đang xác nhận khoản thu...';
         setTimeout(() => {
           close();
-          try { onPaid(method); } catch (e) { toast(e.message, 'err'); }
-        }, 700);
+          try { onPaid(); } catch (e) { toast(e.message, 'err'); }
+        }, 900);
       };
     });
   }
   function openBuyPosts(after) {
-    openCheckout(`Gói thêm ${P.extraPosts.posts} tin đăng`, P.extraPosts.price, method => {
-      api.pay('posts', { method });
+    openCheckout(`Gói thêm ${P.extraPosts.posts} tin đăng`, P.extraPosts.price, () => {
+      api.pay('posts');
       toast(`Đã thêm ${P.extraPosts.posts} lượt đăng tin`, 'ok');
       if (after) after();
     });
   }
+  function serviceName(kind) { return kind === 'bump' ? 'Đẩy tin 1 lượt' : `Tin ưu tiên ${P.featured.days} ngày`; }
   function openServices(l) {
     modal('💎 Dịch vụ cho tin đăng', `
       <p class="muted">“<b>${esc(l.title)}</b>”</p>
       <div class="plans">
         <button class="plan" data-kind="bump"><b>🔝 Đẩy tin</b><span class="price">${money(P.bump.price)}</span><span class="small muted">/ lượt</span><span class="small">Làm mới tin, đưa lên đầu mục “Mới đăng”</span></button>
-        <button class="plan best" data-kind="featured"><em>Hiệu quả nhất</em><b>⚡ Tin nổi bật</b><span class="price">${money(P.featured.price)}</span><span class="small muted">/ ${P.featured.days} ngày</span><span class="small">Ô lớn trang chủ kèm SĐT, ưu tiên đầu kết quả tìm kiếm</span></button>
+        <button class="plan best" data-kind="featured"><b>⚡ Tin ưu tiên</b><span class="price">${money(P.featured.price)}</span><span class="small muted">/ ${P.featured.days} ngày</span><span class="small">Ô lớn trang chủ, ưu tiên đầu kết quả tìm kiếm</span></button>
       </div>
-      ${l.boosted ? `<p class="small">Tin đang nổi bật thêm ${timeLeft(l.boostUntil)} — mua thêm sẽ cộng dồn.</p>` : ''}`, (m, close) => {
-      m.querySelectorAll('.plan').forEach(b => b.onclick = () => {
-        const kind = b.dataset.kind;
-        close();
-        openCheckout(kind === 'bump' ? 'Đẩy tin 1 lượt' : `Tin nổi bật ${P.featured.days} ngày`, P[kind].price, method => {
-          api.pay(kind, { listingId: l.id, method });
-          toast(kind === 'bump' ? 'Đã đẩy tin lên đầu 🔝' : 'Tin đã lên mục nổi bật ⚡', 'ok');
-          render();
-        });
-      });
+      ${l.boosted ? `<p class="small">Tin đang ưu tiên thêm ${timeLeft(l.boostUntil)} — mua thêm sẽ cộng dồn.</p>` : ''}
+      <p class="small muted">Dịch vụ trả phí chỉ tăng mức hiển thị, không thay đổi trách nhiệm mô tả trung thực sản phẩm.</p>`, (m, close) => {
+      m.querySelectorAll('.plan').forEach(b => b.onclick = () => { close(); buyService(b.dataset.kind, l); });
+    });
+  }
+  function buyService(kind, l) {
+    openCheckout(`${serviceName(kind)} – ${l.title}`, P[kind].price, () => {
+      api.pay(kind, { listingId: l.id });
+      toast(kind === 'bump' ? 'Đã đẩy tin lên đầu 🔝' : 'Tin đã lên mục ưu tiên ⚡', 'ok');
+      render();
     });
   }
   function pickListing(kind) {
     const me = api.currentUser();
-    const ls = api.searchListings({ cluster: me.cluster, seller: me.id, sort: 'new' });
-    if (!ls.length) { toast('Bạn chưa có tin nào đang đăng.', 'err'); go('/post'); return; }
-    modal(kind === 'bump' ? '🔝 Chọn tin để đẩy' : '⚡ Chọn tin nổi bật', `
+    const ls = api.searchListings({ seller: me.id, sort: 'new' });
+    if (!ls.length) { toast('Bạn chưa có tin nào đang hiển thị.', 'err'); go('/post'); return; }
+    modal(kind === 'bump' ? '🔝 Chọn tin để đẩy' : '⚡ Chọn tin ưu tiên', `
       <div class="radio-list">${ls.map((l, i) => `<label class="radio-row"><input type="radio" name="lid" value="${l.id}" ${i ? '' : 'checked'}> <span class="grow ellipsis">${esc(l.title)}</span>${l.boosted ? '<span class="badge b-boost">⚡</span>' : ''}</label>`).join('')}</div>
       <button class="btn primary block" id="pickBtn">Tiếp tục</button>`, (m, close) => {
       m.querySelector('#pickBtn').onclick = () => {
         const id = m.querySelector('input[name=lid]:checked').value;
         close();
-        openServicesDirect(kind, api.getListing(id));
+        buyService(kind, api.getListing(id));
       };
     });
   }
-  function openServicesDirect(kind, l) {
-    openCheckout((kind === 'bump' ? 'Đẩy tin 1 lượt' : `Tin nổi bật ${P.featured.days} ngày`) + ` – ${l.title}`, P[kind].price, method => {
-      api.pay(kind, { listingId: l.id, method });
-      toast(kind === 'bump' ? 'Đã đẩy tin lên đầu 🔝' : 'Tin đã lên mục nổi bật ⚡', 'ok');
-      render();
-    });
-  }
-  function openAdForm(kind, side) {
-    const isBanner = kind === 'banner';
-    modal(isBanner ? '🪧 Đặt banner 2 bên' : '🏪 Đăng ký đối tác cửa hàng', `
+  function openBannerForm(side) {
+    modal('🪧 Đặt banner đối tác', `
+      <p class="small muted">Banner hiển thị ở hai bên trang chủ, tìm kiếm và chi tiết tin, gắn nhãn “Quảng cáo”. Hàng hóa của đối tác không được đưa vào danh mục đồ cũ cá nhân.</p>
       <form id="adForm" class="form">
-        <label>Tên cửa hàng / dịch vụ<input name="shop" required placeholder="VD: Sửa xe Tân Xã"></label>
+        <label>Tên cửa hàng / doanh nghiệp<input name="shop" required placeholder="VD: Quán in Tân Photo"></label>
         <label>Số điện thoại liên hệ<input name="phone" required pattern="0[0-9 ]{9,12}" placeholder="09xxxxxxxx"></label>
-        ${isBanner ? `<div class="row2">
+        <div class="row2">
           <label>Vị trí<select name="side"><option value="left" ${side === 'right' ? '' : 'selected'}>Bên trái</option><option value="right" ${side === 'right' ? 'selected' : ''}>Bên phải</option></select></label>
-          <label>Thời gian<select name="weeks"><option value="1">1 tuần</option><option value="2">2 tuần</option><option value="4">4 tuần</option></select></label>
-        </div>` : ''}
-        <div class="checkout-sum"><span>Tổng</span><b class="price" id="adTotal">${money(isBanner ? P.banner.price : P.partner.price)}</b></div>
+          <label>Thời hạn<select name="months"><option value="1">1 tháng</option><option value="2">2 tháng</option><option value="3">3 tháng</option></select></label>
+        </div>
+        <div class="checkout-sum"><span>Tổng</span><b class="price" id="adTotal">${money(P.banner.price)}</b></div>
         <button class="btn primary block">Tiếp tục thanh toán</button>
       </form>`, (m, close) => {
       const f = m.querySelector('#adForm');
-      if (isBanner) f.weeks.onchange = () => { m.querySelector('#adTotal').textContent = money(P.banner.price * Number(f.weeks.value)); };
+      f.months.onchange = () => { m.querySelector('#adTotal').textContent = money(P.banner.price * Number(f.months.value)); };
       f.onsubmit = e => {
         e.preventDefault();
-        const opts = { shop: f.shop.value.trim(), phone: f.phone.value.trim(), side: isBanner ? f.side.value : '', weeks: isBanner ? Number(f.weeks.value) : 0 };
-        const amount = isBanner ? P.banner.price * opts.weeks : P.partner.price;
+        const opts = { shop: f.shop.value.trim(), phone: f.phone.value.trim(), side: f.side.value, months: Number(f.months.value) };
         close();
-        openCheckout(isBanner ? `Banner ${opts.side === 'right' ? 'bên phải' : 'bên trái'} ${opts.weeks} tuần` : 'Gói đối tác cửa hàng 1 tháng', amount, method => {
-          api.pay(kind, Object.assign(opts, { method }));
-          toast('Đã nhận đăng ký! Banner/nhãn đối tác sẽ được duyệt trong 24 giờ.', 'ok');
+        openCheckout(`Banner ${opts.side === 'right' ? 'bên phải' : 'bên trái'} ${opts.months} tháng`, P.banner.price * opts.months, () => {
+          api.pay('banner', opts);
+          toast('Đã nhận đăng ký banner! Nội dung sẽ được duyệt trước khi hiển thị.', 'ok');
           renderHeader();
         });
       };
@@ -636,11 +580,11 @@
   }
   function bindBuy(root) {
     root.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => {
-      if (!requireLogin('Đăng nhập để mua gói dịch vụ.')) return;
+      if (!requireLogin('Đăng nhập để mua dịch vụ.')) return;
       const k = b.dataset.buy;
       if (k === 'posts') openBuyPosts(render);
       else if (k === 'bump' || k === 'featured') pickListing(k);
-      else openAdForm(k);
+      else openBannerForm();
     });
   }
 
@@ -650,37 +594,38 @@
     return `<div class="container page">
       <div class="pricing-hero">
         <h1>💎 Bảng giá dịch vụ</h1>
-        <p class="muted">Đăng tin cơ bản luôn miễn phí. Các gói trả phí giúp tin của bạn được nhiều người thấy hơn.</p>
-        ${q ? `<div class="notice">📝 Tháng này bạn còn <b>${q.freeLeft}/${P.freePosts}</b> tin miễn phí · <b>${q.credits}</b> lượt đã mua · <a href="#/me?tab=payments">Lịch sử thanh toán</a></div>` : ''}
+        <p class="muted">Người mua xem, tìm và liên hệ hoàn toàn miễn phí. Người bán có ${P.freePosts} tin miễn phí mỗi tháng; dịch vụ trả phí chỉ khi bạn cần đăng thêm hoặc tăng hiển thị.</p>
+        ${q && !api.isAdmin(me) ? `<div class="notice">📝 Tháng này bạn còn <b>${q.freeLeft}/${P.freePosts}</b> tin miễn phí · <b>${q.credits}</b> lượt đã mua · <a href="#/me?tab=payments">Lịch sử thanh toán</a></div>` : ''}
       </div>
       ${pricingCards()}
       <section class="section panel">
-        <h3>So sánh hiển thị</h3>
+        <h3>Toàn bộ bảng giá</h3>
         <table class="pay-table">
-          <tr><th></th><th>Tin thường</th><th>Đẩy tin</th><th>Tin nổi bật</th></tr>
-          <tr><td>Giá</td><td>Miễn phí (${P.freePosts} tin/tháng)</td><td>${money(P.bump.price)}/lượt</td><td>${money(P.featured.price)}/${P.featured.days} ngày</td></tr>
-          <tr><td>Vị trí trong “Mới đăng”</td><td>Theo thời gian đăng</td><td>✔ Lên đầu ngay</td><td>Theo thời gian đăng</td></tr>
-          <tr><td>Ô lớn trang chủ kèm SĐT</td><td>—</td><td>—</td><td>✔</td></tr>
-          <tr><td>Ưu tiên đầu kết quả tìm kiếm</td><td>—</td><td>—</td><td>✔</td></tr>
-          <tr><td>Nhãn ⚡ Nổi bật</td><td>—</td><td>—</td><td>✔</td></tr>
+          <tr><th>Dịch vụ</th><th>Đơn giá / chính sách</th><th>Ghi chú</th></tr>
+          <tr><td>Đăng cơ bản</td><td>${P.freePosts} tin miễn phí / tài khoản / tháng</td><td>Sửa tin và gia hạn tin không tốn lượt</td></tr>
+          <tr><td>Mua thêm tin</td><td>${money(P.extraPosts.price)} / gói ${P.extraPosts.posts} tin</td><td>Lượt đã mua không hết hạn</td></tr>
+          <tr><td>Đẩy tin</td><td>${money(P.bump.price)} / lượt</td><td>Lên đầu mục “Mới đăng”</td></tr>
+          <tr><td>Tin ưu tiên</td><td>${money(P.featured.price)} / ${P.featured.days} ngày</td><td>Hiển thị nổi bật có thời hạn</td></tr>
+          <tr><td>Banner đối tác</td><td>${money(P.banner.price)} / ${P.banner.unit} / vị trí</td><td>Bán quảng cáo, không bán gói cửa hàng trên sàn</td></tr>
+          <tr><td><b>Hoa hồng giao dịch</b></td><td><b>0đ</b></td><td>Không thu theo giá trị món đồ</td></tr>
         </table>
       </section>
       <section class="section two-col">
-        <div class="panel"><h3>🏪 Dành cho cửa hàng & dịch vụ</h3>
-          <p class="muted small">Cửa hàng sửa đồ, chuyển trọ, vệ sinh phòng, thu mua đồ cũ quanh Hòa Lạc có thể đăng ký gói đối tác (${money(P.partner.price)}/${P.partner.unit}) hoặc đặt banner hai bên trang (${money(P.banner.price)}/${P.banner.unit}).</p>
-          <div class="btn-row"><button class="btn primary" data-buy="partner">Đăng ký đối tác</button><button class="btn ghost" data-buy="banner">Đặt banner</button></div>
+        <div class="panel"><h3>🪧 Dành cho cửa hàng & doanh nghiệp</h3>
+          <p class="muted small">Quán in, sửa đồ, chuyển trọ, vệ sinh phòng quanh Hòa Lạc có thể đặt banner hai bên trang (${money(P.banner.price)}/${P.banner.unit}/vị trí). Banner được tách khỏi danh mục tin đăng C2C để người dùng không nhầm với tin bán đồ cũ.</p>
+          <div class="btn-row"><button class="btn primary" data-buy="banner">Đặt banner</button></div>
         </div>
         <div class="panel"><h3>❓ Câu hỏi thường gặp</h3>
-          <p class="small"><b>Tin miễn phí tính thế nào?</b> Mỗi tài khoản được ${P.freePosts} tin mới mỗi tháng dương lịch. Sửa tin không tốn lượt.</p>
-          <p class="small"><b>Lượt mua thêm có hết hạn không?</b> Không, dùng khi nào hết lượt miễn phí.</p>
-          <p class="small"><b>Gia hạn tin nổi bật?</b> Mua thêm sẽ cộng dồn thời gian. Bạn được thông báo khi còn dưới 24 giờ.</p>
+          <p class="small"><b>Tin miễn phí tính thế nào?</b> Mỗi tài khoản được ${P.freePosts} tin mới mỗi tháng dương lịch. Sửa tin và gia hạn tin không tốn lượt.</p>
+          <p class="small"><b>Tin có hết hạn không?</b> Tin không được cập nhật sau ${R.listingDays} ngày sẽ tự ẩn. Bạn gia hạn miễn phí nếu món đồ vẫn còn.</p>
+          <p class="small"><b>Thanh toán thế nào?</b> Chuyển khoản theo nội dung hướng dẫn; dịch vụ kích hoạt khi khoản thu được xác nhận.</p>
         </div>
       </section>
     </div>`;
   }
   function mountPricing(q) {
     bindBuy($app);
-    if (q.banner && requireLogin('Đăng nhập để đặt banner.')) openAdForm('banner', q.banner);
+    if (q.banner && requireLogin('Đăng nhập để đặt banner.')) openBannerForm(q.banner);
   }
 
   // ---------- Thông báo ----------
@@ -689,7 +634,7 @@
     const f = q.f || '';
     const all = api.notifications();
     const ns = f ? all.filter(n => n.kind === f) : all;
-    const filters = [['', 'Tất cả'], ['deal', '📌 Giao dịch'], ['review', '⭐ Đánh giá'], ['pay', '💳 Thanh toán'], ['system', '📣 Hệ thống']];
+    const filters = [['', 'Tất cả'], ['status', '📌 Tin đăng'], ['report', '🚩 Kiểm duyệt'], ['pay', '💳 Thanh toán'], ['system', '📣 Hệ thống']];
     return `<div class="container page narrow">
       <div class="results-head"><h1>🔔 Thông báo</h1>${all.some(n => !n.read) ? '<button class="btn ghost small" id="readAll2">Đánh dấu tất cả đã đọc</button>' : ''}</div>
       <div class="chips nf">${filters.map(([k, t]) => `<a href="#/notifications${qs({ f: k })}" class="chip ${f === k ? 'on' : ''}">${t}</a>`).join('')}</div>
@@ -702,47 +647,12 @@
     if (b) b.onclick = () => { api.markNotificationsRead(); render(); };
   }
 
-  // ---------- Đánh giá ----------
-  function viewReviews(q) {
-    const me = api.currentUser();
-    if (!me) return loginWall('Đăng nhập để xem và viết đánh giá.');
-    const pending = api.pendingReviews();
-    const received = api.reviewsFor(me.id);
-    const written = api.reviewsBy(me.id);
-    const tab = q.tab || (pending.length ? 'pending' : 'received');
-    const rt = api.rating(me.id);
-    const tabs = [['pending', 'Chờ đánh giá', pending.length], ['received', 'Đánh giá về tôi', received.length], ['written', 'Tôi đã đánh giá', written.length]];
-    let body;
-    if (tab === 'pending') {
-      body = pending.length ? `<div class="rows">${pending.map(p => `
-        <div class="row-item"><a href="#/item/${p.listing.id}" class="row-thumb">${thumb(p.listing)}</a>
-          <div class="row-main"><b>${esc(p.listing.title)}</b><div class="small muted">${p.listing.seller === me.id ? 'Người mua' : 'Người bán'}: ${esc(p.other.name)} · Giao dịch ${p.listing.soldAt ? timeAgo(p.listing.soldAt) : ''}</div></div>
-          <div class="row-actions"><button class="btn primary small" data-review="${p.listing.id}" data-to="${p.other.id}">⭐ Đánh giá</button></div></div>`).join('')}</div>`
-        : '<div class="empty">Không có giao dịch nào chờ đánh giá 🎉</div>';
-    } else if (tab === 'received') body = reviewList(received);
-    else body = reviewList(written, true);
-    return `<div class="container page">
-      <h1>⭐ Đánh giá</h1>
-      <div class="rev-summary panel">
-        <div class="rev-avg"><b>${rt.count ? rt.avg.toFixed(1) : '–'}</b>${stars(rt.avg, rt.count)}<span class="small muted">${rt.count} đánh giá về bạn</span></div>
-        <div class="rev-bars">${[5, 4, 3, 2, 1].map(n => { const c = received.filter(r => r.stars === n).length; return `<div class="bar-row"><span>${n}★</span><div class="bar"><i style="width:${received.length ? c / received.length * 100 : 0}%"></i></div><span class="small muted">${c}</span></div>`; }).join('')}</div>
-        <p class="small muted rev-tip">Đánh giá sau mỗi giao dịch giúp cộng đồng biết ai uy tín. Người bán có nhiều đánh giá tốt sẽ được người mua tin tưởng hơn.</p>
-      </div>
-      <div class="tabs">${tabs.map(([k, t, n]) => `<a href="#/reviews?tab=${k}" class="${k === tab ? 'active' : ''}">${t}${n ? ` <span class="count">${n}</span>` : ''}</a>`).join('')}</div>
-      <div class="tab-body">${body}</div>
-    </div>`;
-  }
-  function mountReviews() {
-    document.querySelectorAll('[data-review]').forEach(b => b.onclick = () => openReview(b.dataset.review, b.dataset.to));
-  }
-
   // ---------- Tìm kiếm ----------
   function viewSearch(q) {
-    const cid = api.activeClusterId();
-    const cl = R.cluster(cid);
+    const cl = R.cluster(CID);
     const rs = api.searchListings(q);
     const opt = (v, label, cur) => `<option value="${esc(v)}" ${String(cur || '') === String(v) ? 'selected' : ''}>${esc(label)}</option>`;
-    const activeCount = ['cat', 'type', 'min', 'max', 'school', 'area', 'dist', 'cond', 'moving'].filter(k => q[k]).length;
+    const activeCount = ['cat', 'type', 'min', 'max', 'school', 'area', 'dist', 'cond'].filter(k => q[k]).length;
 
     return `<div class="container page">
       <div class="search-layout">
@@ -760,18 +670,17 @@
               <div class="row2"><input name="min" type="number" min="0" step="10000" placeholder="Từ" value="${esc(q.min || '')}"><input name="max" type="number" min="0" step="10000" placeholder="Đến" value="${esc(q.max || '')}"></div>
               <div class="chips">${[[0, 100000, '< 100k'], [100000, 300000, '100–300k'], [300000, 1000000, '300k–1tr'], [1000000, '', '> 1tr']].map(([a, b, t]) => `<button type="button" class="chip" data-min="${a}" data-max="${b}">${t}</button>`).join('')}</div>
             </label>
-            <label>Trường<select name="school">${opt('', 'Tất cả trường', q.school)}${cl.schools.map(s => opt(s, s, q.school)).join('')}</select></label>
             <label>Khu trọ / KTX<select name="area">${opt('', 'Tất cả khu vực', q.area)}${cl.areas.map(a => opt(a.id, a.name, q.area)).join('')}</select></label>
+            <label>Trường / nhóm người dùng<select name="school">${opt('', 'Tất cả', q.school)}${cl.schools.map(s => opt(s, s, q.school)).join('')}</select></label>
             <label>Khoảng cách tối đa<select name="dist">${opt('', 'Không giới hạn', q.dist)}${[1, 2, 3, 5].map(d => opt(d, 'Trong ' + d + ' km', q.dist)).join('')}</select></label>
             <label>Tình trạng<select name="cond">${opt('', 'Mọi tình trạng', q.cond)}${R.conditions.map(c => opt(c, c, q.cond)).join('')}</select></label>
-            <label class="check"><input type="checkbox" name="moving" value="1" ${q.moving ? 'checked' : ''}> Chỉ đồ thanh lý chuyển trọ</label>
             <input type="hidden" name="sort" value="${esc(q.sort || '')}">
             <button class="btn primary block">Áp dụng</button>
           </form>
         </aside>
         <section>
           <div class="results-head">
-            <div><h2>${q.q ? `Kết quả cho “${esc(q.q)}”` : 'Tất cả tin đăng'}</h2><div class="muted small">${rs.length} tin tại cụm ${esc(cl.name)}</div></div>
+            <div><h2>${q.q ? `Kết quả cho “${esc(q.q)}”` : 'Tất cả tin đăng'}</h2><div class="muted small">${rs.length} tin đang hiển thị tại Hòa Lạc · tin đã bán hoặc đã tự ẩn không hiện ở đây</div></div>
             <div class="results-tools">
               <button class="btn ghost show-sm" id="toggleFilters">⚙ Lọc${activeCount ? ` (${activeCount})` : ''}</button>
               <select id="sortSel">
@@ -779,7 +688,7 @@
               </select>
             </div>
           </div>
-          ${grid(rs, 'Không tìm thấy tin phù hợp. Thử bỏ bớt bộ lọc hoặc <a href="#/post">đăng tin cần mua</a>.')}
+          ${grid(rs, 'Không tìm thấy tin phù hợp. Thử bỏ bớt bộ lọc.')}
         </section>
       </div>
     </div>`;
@@ -791,7 +700,7 @@
       go('/search' + qs(d));
     };
     f.onsubmit = e => { e.preventDefault(); submit(); };
-    f.querySelectorAll('input[type=radio], select, input[type=checkbox]').forEach(el => el.onchange = submit);
+    f.querySelectorAll('input[type=radio], select').forEach(el => el.onchange = submit);
     f.querySelectorAll('.chip').forEach(c => c.onclick = () => { f.min.value = c.dataset.min; f.max.value = c.dataset.max; submit(); });
     document.getElementById('sortSel').onchange = e => go('/search' + qs(Object.assign({}, q, { sort: e.target.value })));
     document.getElementById('toggleFilters').onclick = () => document.getElementById('filters').classList.toggle('open');
@@ -802,27 +711,32 @@
     const l = api.getListing(id, true);
     if (!l) return notFound('Tin đăng không tồn tại hoặc đã bị xóa.');
     const me = api.currentUser();
+    const admin = api.isAdmin(me);
     const seller = api.getUser(l.seller);
-    const rt = api.rating(seller.id);
     const cat = R.category(l.cat);
     const mine = me && me.id === l.seller;
-    const reservedByMe = me && l.reservedBy === me.id;
-    const similar = api.searchListings({ cluster: l.cluster, cat: l.cat, exclude: l.id }).slice(0, 4);
-    const comboSum = l.combo ? l.combo.reduce((s, i) => s + Number(i.price || 0), 0) : 0;
+    if ((l.status === 'removed' || l.status === 'hidden') && !mine && !admin) return notFound('Tin này đã bị ẩn hoặc gỡ do vi phạm quy định cộng đồng.');
+    const similar = api.searchListings({ cat: l.cat, exclude: l.id }).slice(0, 4);
     const imgs = l.images && l.images.length ? l.images : [null];
+    const sellerListings = api.searchListings({ seller: seller.id }).length;
+
+    let statusNote = '';
+    if (l.status === 'sold') statusNote = `<div class="notice">✔ ${doneLabel(l)} ${l.soldAt ? timeAgo(l.soldAt) : ''}.</div>`;
+    if (l.status === 'expired') statusNote = `<div class="notice warn">Tin đã tự ẩn vì ${R.listingDays} ngày chưa cập nhật.${mine ? ' Gia hạn miễn phí nếu món đồ vẫn còn.' : ''}</div>`;
+    if (l.status === 'hidden') statusNote = `<div class="notice warn">🚩 Tin đang bị ẩn: ${esc(l.modNote)}${mine ? ' Sửa tin để hiển thị lại.' : ''}</div>`;
+    if (l.status === 'removed') statusNote = `<div class="notice warn">🚩 Tin đã bị gỡ: ${esc(l.modNote)}</div>`;
 
     let actions = '';
     if (mine) {
-      actions = `<a href="#/post?edit=${l.id}" class="btn ghost">✏ Sửa tin</a>
-        ${l.status !== 'sold' ? `<button class="btn primary" data-act="sold">✔ Đánh dấu đã giao dịch</button>` : `<button class="btn ghost" data-act="reopen">↺ Mở bán lại</button>`}
-        ${l.status === 'reserved' ? `<button class="btn ghost" data-act="unreserve">Hủy giữ chỗ</button>` : ''}
-        ${l.status !== 'sold' ? `<button class="btn boost" data-act="boost">⚡ Đẩy tin / Tin nổi bật</button>` : ''}`;
-    } else if (l.status === 'sold') {
-      actions = `<div class="notice">Sản phẩm này đã được giao dịch.</div>`;
-    } else {
-      actions = `<button class="btn primary" data-act="chat">💬 Nhắn tin người bán</button>
-        ${l.status === 'available' ? `<button class="btn ghost" data-act="reserve">📌 Đặt giữ</button>` : ''}
-        ${reservedByMe ? `<button class="btn ghost" data-act="unreserve">Hủy đặt giữ</button>` : ''}`;
+      if (l.status === 'available') actions = `<a href="#/post?edit=${l.id}" class="btn ghost">✏ Sửa tin</a>
+        <button class="btn primary" data-act="sold">✔ ${doneLabel(l)}</button>
+        <button class="btn boost" data-act="boost">⚡ Đẩy tin / Tin ưu tiên</button>
+        <button class="btn ghost" data-act="renew">↻ Gia hạn ${R.listingDays} ngày</button>`;
+      else if (l.status === 'expired') actions = `<button class="btn primary" data-act="renew">↻ Gia hạn miễn phí</button><button class="btn ghost" data-act="sold">✔ ${doneLabel(l)}</button>`;
+      else if (l.status === 'hidden') actions = `<a href="#/post?edit=${l.id}" class="btn primary">✏ Sửa tin để hiển thị lại</a>`;
+      else if (l.status === 'sold') actions = `<button class="btn ghost" data-act="reopen">↺ Mở bán lại</button>`;
+    } else if (l.status === 'available' && !admin) {
+      actions = `<button class="btn primary" data-act="chat">💬 Nhắn tin người bán</button>`;
     }
 
     return `<div class="container page">
@@ -834,7 +748,6 @@
           </div>
 
           <div class="item-details">
-
           <div class="panel">
             <h3>Mô tả</h3>
             <p class="desc">${esc(l.desc || 'Người bán chưa viết mô tả.').replace(/\n/g, '<br>')}</p>
@@ -842,8 +755,8 @@
               <div><span>Danh mục</span><b>${cat.icon} ${cat.name}</b></div>
               <div><span>Tình trạng</span><b>${esc(l.condition)}</b></div>
               <div><span>Đã sử dụng</span><b>${esc(l.usedTime || '—')}</b></div>
-              <div><span>Trường</span><b>${esc(l.school || '—')}</b></div>
-              <div><span>Khu vực</span><b>${esc(areaName(l.cluster, l.area))} (${R.cluster(l.cluster).name})</b></div>
+              <div><span>Trường / nhóm</span><b>${esc(l.school || '—')}</b></div>
+              <div><span>Khu vực</span><b>${esc(areaName(l.area))}</b></div>
               <div><span>Khoảng cách</span><b>~${l.distance} km</b></div>
             </div>
             ${l.type === 'trade' ? `<div class="notice trade">🔁 <b>Muốn đổi lấy:</b> ${esc(l.tradeFor)}</div>` : ''}
@@ -851,34 +764,21 @@
 
           <div class="panel">
             <h3>🗺 Khu vực giao dịch</h3>
-            <p class="small muted">📍 ${esc(areaName(l.cluster, l.area))}, ${esc(R.cluster(l.cluster).address || R.cluster(l.cluster).name)} · Vị trí gần đúng – hãy hẹn gặp ở nơi công cộng. <a href="${gMapsLink((R.area(l.cluster, l.area) || {}).lat + ',' + (R.area(l.cluster, l.area) || {}).lng)}" target="_blank" rel="noopener">Xem trên Google Maps ↗</a></p>
+            <p class="small muted">📍 ${esc(areaName(l.area))}, ${esc(R.cluster(CID).address)} · Vị trí gần đúng – hãy hẹn gặp ở nơi công cộng. <a href="${gMapsLink((R.area(CID, l.area) || {}).lat + ',' + (R.area(CID, l.area) || {}).lng)}" target="_blank" rel="noopener">Xem trên Google Maps ↗</a></p>
             <div id="itemMap" class="map sm"></div>
           </div>
-
-          <div class="panel">
-            <div class="section-head"><h3>⭐ Đánh giá về người bán</h3><a href="#/user/${seller.id}" class="small">Xem tất cả (${rt.count}) →</a></div>
-            ${reviewList(api.reviewsFor(seller.id).slice(0, 3))}
-          </div>
-
-          ${l.combo && l.combo.length ? `<div class="panel">
-            <h3>📦 Combo gồm ${l.combo.length} món</h3>
-            <table class="combo-table">
-              ${l.combo.map(i => `<tr><td>${esc(i.name)}</td><td class="r muted">${money(i.price)}</td></tr>`).join('')}
-              <tr class="sum"><td>Tổng mua lẻ</td><td class="r"><s>${money(comboSum)}</s></td></tr>
-              <tr class="sum"><td><b>Giá combo</b></td><td class="r"><b class="price">${money(l.price)}</b>${comboSum > l.price ? ` <span class="badge b-free">Tiết kiệm ${money(comboSum - l.price)}</span>` : ''}</td></tr>
-            </table>
-          </div>` : ''}
           </div>
 
         <aside class="item-side">
           <div class="panel">
-            <div class="item-badges">${typeBadge[l.type]}${l.movingSale ? '<span class="badge b-moving">Thanh lý chuyển trọ</span>' : ''}${l.boosted ? '<span class="badge b-boost">⚡ Nổi bật</span>' : ''}</div>
+            <div class="item-badges">${typeBadge[l.type]}${l.boosted ? '<span class="badge b-boost">⚡ Ưu tiên</span>' : ''}</div>
             <h1 class="item-title">${esc(l.title)}</h1>
             <div class="item-price">${priceLabel(l)}</div>
-            <div class="muted small">📍 ${esc(areaName(l.cluster, l.area))} · ~${l.distance} km · Đăng ${timeAgo(l.createdAt)} · 👁 ${l.views}</div>
-            ${l.status === 'reserved' ? `<div class="notice warn">📌 ${reservedByMe ? 'Bạn đang' : 'Đang có người'} giữ sản phẩm này · còn ${timeLeft(l.reservedUntil)}${(reservedByMe || mine) && l.meetPoint ? `<br>Điểm hẹn: <b>${esc(l.meetPoint)}</b>` : ''}</div>` : ''}
+            <div class="muted small">📍 ${esc(areaName(l.area))} · ~${l.distance} km · Đăng ${timeAgo(l.createdAt)} · 👁 ${l.views}</div>
+            ${mine && l.status === 'available' ? `<div class="small muted">Tự ẩn sau ${timeLeft(l.expiresAt)} nếu không cập nhật.</div>` : ''}
+            ${statusNote}
             <div class="item-actions">${actions}</div>
-            ${!mine ? `<button class="link-btn small" data-act="report">🚩 Báo cáo tin đăng</button>` : ''}
+            ${!mine && !admin && l.status === 'available' ? `<button class="link-btn small" data-act="report">🚩 Báo cáo tin đăng</button>` : ''}
           </div>
 
           <div class="panel">
@@ -886,12 +786,11 @@
               ${avatar(seller, 'lg')}
               <div>
                 <b>${esc(seller.name)}</b>
-                <div>${verifiedBadge(seller)}</div>
-                <div>${stars(rt.avg, rt.count)}</div>
-                <div class="small muted">${esc(seller.school)} · Tham gia ${fmtDate(seller.joinedAt)}</div>
+                <div>${emailBadge(seller)}</div>
+                <div class="small muted">${esc(seller.school)} · ${sellerListings} tin đang hiển thị · Tham gia ${fmtDate(seller.joinedAt)}</div>
               </div>
             </a>
-            ${mine ? '' : sellerContact(seller)}
+            ${mine || admin || l.status !== 'available' ? '' : sellerContact(seller)}
           </div>
 
           <div class="panel safety">
@@ -900,7 +799,7 @@
               <li>Hẹn gặp ở nơi công cộng: cổng trường, thư viện, căng tin.</li>
               <li>Kiểm tra kỹ hàng rồi mới trả tiền.</li>
               <li>Không chuyển khoản đặt cọc cho người lạ.</li>
-              <li>Ưu tiên người bán đã xác thực sinh viên.</li>
+              <li>ReMarket không giữ tiền và không bảo đảm chất lượng hàng; xác thực email không thay thế việc kiểm tra hàng.</li>
             </ul>
           </div>
         </aside>
@@ -919,88 +818,47 @@
     });
     const act = {
       chat: guard(() => { if (!requireLogin('Đăng nhập để nhắn tin người bán.')) return; const c = api.startConversation(id); go('/chat/' + c.id); }),
-      reserve: () => { if (requireLogin('Đăng nhập để đặt giữ.')) openReserve(l); },
-      unreserve: guard(() => { if (!confirm('Hủy giữ chỗ sản phẩm này?')) return; api.cancelReservation(id); toast('Đã hủy giữ chỗ'); render(); }),
       sold: () => openMarkSold(l),
-      reopen: guard(() => { api.reopen(id); toast('Tin đã mở bán lại', 'ok'); render(); }),
+      reopen: guard(() => { api.reopen(id); toast('Tin đã hiển thị lại', 'ok'); render(); }),
+      renew: guard(() => { api.renew(id); toast(`Đã gia hạn miễn phí ${R.listingDays} ngày`, 'ok'); render(); }),
       boost: () => openServices(l),
-      report: () => openReport(l),
+      report: () => { if (requireLogin('Đăng nhập để gửi báo cáo.')) openReport(l); },
     };
     document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => act[b.dataset.act]());
     bindContact($app);
     const ll = listingLatLng(l);
-    if (ll) mountMap(document.getElementById('itemMap'), l.cluster, [l], { center: ll, zoom: 15, single: true });
+    if (ll) mountMap(document.getElementById('itemMap'), [l], { center: ll, zoom: 15, single: true });
   }
 
-  function openReserve(l) {
-    const cl = R.cluster(l.cluster);
-    modal('Đặt giữ sản phẩm', `
-      <p class="muted">Người bán sẽ giữ “<b>${esc(l.title)}</b>” cho bạn trong thời gian đã chọn. Hết hạn mà chưa gặp, tin sẽ tự mở bán lại.</p>
-      <form id="resForm" class="form">
-        <label>Điểm gặp đề xuất
-          <select name="meet">${cl.meetPoints.map(p => `<option>${esc(p)}</option>`).join('')}<option value="__other">Khác...</option></select>
-        </label>
-        <label id="otherWrap" hidden>Điểm gặp khác<input name="other" placeholder="VD: Cổng KTX dãy A"></label>
-        <label>Giữ trong
-          <div class="seg">${[[6, '6 giờ'], [24, '24 giờ'], [48, '48 giờ']].map(([v, t], i) => `<label><input type="radio" name="hours" value="${v}" ${i === 1 ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div>
-        </label>
-        <button class="btn primary block">Xác nhận đặt giữ</button>
-      </form>`, (m, close) => {
-      const f = m.querySelector('#resForm');
-      f.meet.onchange = () => { m.querySelector('#otherWrap').hidden = f.meet.value !== '__other'; };
-      f.onsubmit = guard(e => {
-        e.preventDefault();
-        const meet = f.meet.value === '__other' ? f.other.value.trim() : f.meet.value;
-        if (!meet) throw new Error('Nhập điểm gặp.');
-        api.reserve(l.id, meet, Number(f.hours.value));
+  function openMarkSold(l) {
+    modal(`✔ ${doneLabel(l)}?`, `
+      <p class="muted">“<b>${esc(l.title)}</b>” sẽ được đánh dấu <b>${doneLabel(l).toLowerCase()}</b> để người tìm kiếm không liên hệ nhầm. Chỉ bạn mới thay đổi được trạng thái này.</p>
+      <button class="btn primary block" id="soldBtn">Xác nhận ${doneLabel(l).toLowerCase()}</button>`, (m, close) => {
+      m.querySelector('#soldBtn').onclick = guard(() => {
+        api.markSold(l.id);
         close();
-        toast('Đã đặt giữ! Người bán đã nhận được tin nhắn.', 'ok');
+        toast(`Đã cập nhật: ${doneLabel(l).toLowerCase()} 🎉`, 'ok');
         render();
       });
     });
   }
 
-  function openMarkSold(l) {
-    // Ứng viên người mua: người đang giữ + những người đã nhắn tin về tin này
-    const convs = api.conversations().filter(c => c.listingId === l.id);
-    const ids = new Set();
-    if (l.reservedBy) ids.add(l.reservedBy);
-    convs.forEach(c => c.members.forEach(m => { if (m !== l.seller) ids.add(m); }));
-    const buyers = [...ids].map(api.getUser).filter(Boolean);
-    modal('Hoàn tất giao dịch', `
-      <form id="soldForm" class="form">
-        <p class="muted">Chọn người đã nhận hàng để hai bên có thể đánh giá nhau.</p>
-        <div class="radio-list">
-          ${buyers.map((u, i) => `<label class="radio-row"><input type="radio" name="buyer" value="${u.id}" ${i === 0 ? 'checked' : ''}>${avatar(u, 'sm')} ${esc(u.name)} ${u.id === l.reservedBy ? '<span class="badge b-trade">Đang giữ</span>' : ''}</label>`).join('')}
-          <label class="radio-row"><input type="radio" name="buyer" value="" ${buyers.length ? '' : 'checked'}> Người ngoài sàn / không xác định</label>
-        </div>
-        <button class="btn primary block">Xác nhận đã giao dịch</button>
-      </form>`, (m, close) => {
-      m.querySelector('#soldForm').onsubmit = guard(e => {
-        e.preventDefault();
-        const buyer = e.target.buyer.value || null;
-        api.markSold(l.id, buyer);
-        close();
-        toast('Đã cập nhật: đã giao dịch 🎉', 'ok');
-        if (buyer) go('/reviews'); else render();
-      });
-    });
-  }
-
   function openReport(l) {
-    const reasons = ['Lừa đảo / yêu cầu chuyển khoản trước', 'Sai thông tin, ảnh không đúng', 'Hàng cấm, hàng giả', 'Đã bán nhưng chưa cập nhật', 'Khác'];
+    const reasons = ['Đòi đặt cọc / chuyển khoản trước', 'Ảnh không thật, sai thông tin', 'Hàng cấm, hàng không được phép đăng', 'Tin rác, spam thương mại', 'Đã bán nhưng chưa cập nhật', 'Khác'];
     modal('🚩 Báo cáo tin đăng', `
       <form id="repForm" class="form">
         <div class="radio-list">${reasons.map((r, i) => `<label class="radio-row"><input type="radio" name="reason" value="${esc(r)}" ${i === 0 ? 'checked' : ''}> ${r}</label>`).join('')}</div>
         <label>Mô tả thêm (không bắt buộc)<textarea name="note" rows="3"></textarea></label>
+        <p class="small muted">Báo cáo được quản trị viên kiểm tra trong vòng 24 giờ.</p>
         <button class="btn danger block">Gửi báo cáo</button>
       </form>`, (m, close) => {
-      m.querySelector('#repForm').onsubmit = e => {
+      m.querySelector('#repForm').onsubmit = guard(e => {
         e.preventDefault();
         api.report(l.id, e.target.reason.value, e.target.note.value);
         close();
-        toast('Cảm ơn bạn! Đội ngũ sẽ kiểm tra tin này.', 'ok');
-      };
+        toast('Cảm ơn bạn! Quản trị viên sẽ kiểm tra tin này trong 24 giờ.', 'ok');
+        renderHeader();
+      });
     });
   }
 
@@ -1010,34 +868,37 @@
   function viewPost(q) {
     const me = api.currentUser();
     if (!me) return loginWall('Đăng nhập để đăng tin bán, trao đổi hoặc cho tặng.');
+    if (api.isAdmin(me)) return notFound('Tài khoản quản trị không đăng tin.');
+    if (!me.emailVerified) return `<div class="container page narrow"><div class="empty big">✉<p>Xác thực email trước khi đăng tin.</p><a class="btn primary" href="#/verify">Xác thực email</a></div></div>`;
     const editing = q.edit ? api.getListing(q.edit) : null;
-    if (q.edit && (!editing || editing.seller !== me.id)) return notFound('Không thể sửa tin này.');
-    const cl = R.cluster(me.cluster);
+    if (q.edit && (!editing || editing.seller !== me.id || editing.status === 'removed')) return notFound('Không thể sửa tin này.');
+    if (!editing && me.restricted) return notFound('Tài khoản đang bị hạn chế đăng tin do vi phạm quy định nhiều lần.');
+    const cl = R.cluster(CID);
     const l = editing || {
       type: q.type || 'sell', title: '', cat: '', price: '', tradeFor: '', condition: 'Tốt', usedTime: '', desc: '',
-      school: me.school, area: me.area, movingSale: !!q.moving || !!me.moving, combo: q.combo ? [{ name: '', price: '' }, { name: '', price: '' }] : null, images: [],
+      school: me.school, area: me.area, images: [],
     };
     draftImages = (l.images || []).slice();
     const opt = (v, t, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(t)}</option>`;
 
     return `<div class="container page narrow">
       <h1>${editing ? 'Sửa tin đăng' : 'Đăng tin mới'}</h1>
-      <p class="muted">Tin chuẩn đủ ảnh, giá, tình trạng, vị trí và thời gian sử dụng sẽ được nhiều người xem hơn. Cụm: <b>${cl.name}</b></p>
+      <p class="muted">Tin hợp lệ được hiển thị ngay và kiểm duyệt sau. Ghi rõ tình trạng, lỗi nếu có và khu vực giao dịch để người mua không phải hỏi lại.</p>
+      ${editing && editing.status === 'hidden' ? `<div class="notice warn">🚩 Tin đang bị ẩn: ${esc(editing.modNote)} Lưu thay đổi để hiển thị lại.</div>` : ''}
       ${editing ? '' : quotaBox()}
-      ${!me.verified.student ? '<div class="notice warn">Tài khoản chưa xác thực sinh viên — tin của bạn sẽ hiển thị nhãn “Chưa xác thực”. <a href="#/me?tab=account">Xác thực ngay</a></div>' : ''}
       <form id="postForm" class="form panel">
         <label>Hình thức
           <div class="seg big">
-            ${[['sell', '💰 Bán'], ['trade', '🔁 Trao đổi'], ['free', '🎁 Cho tặng']].map(([v, t]) => `<label><input type="radio" name="type" value="${v}" ${l.type === v ? 'checked' : ''}><span>${t}</span></label>`).join('')}
+            ${[['sell', '💰 Bán'], ['trade', '🔁 Trao đổi'], ['free', '🎁 Cho tặng (0đ)']].map(([v, t]) => `<label><input type="radio" name="type" value="${v}" ${l.type === v ? 'checked' : ''}><span>${t}</span></label>`).join('')}
           </div>
         </label>
 
-        <label>Ảnh sản phẩm <span class="muted small">(tối đa 6 ảnh, ảnh đầu là ảnh bìa)</span>
+        <label>Ảnh thật của sản phẩm * <span class="muted small">(tối đa 6 ảnh, ảnh đầu là ảnh bìa; không dùng ảnh mạng)</span>
           <div class="uploader" id="uploader"></div>
           <input type="file" id="fileInput" accept="image/*" multiple hidden>
         </label>
 
-        <label>Tiêu đề *<input name="title" maxlength="80" value="${esc(l.title)}" placeholder="VD: Nồi cơm điện Sharp 1.8L còn tốt"></label>
+        <label>Tiêu đề *<input name="title" maxlength="80" value="${esc(l.title)}" placeholder="VD: Quạt đứng Senko còn chạy êm"></label>
 
         <div class="row2">
           <label>Danh mục *<select name="cat">${opt('', '— Chọn danh mục —', l.cat)}${R.categories.map(c => opt(c.id, c.icon + ' ' + c.name, l.cat)).join('')}</select></label>
@@ -1045,29 +906,20 @@
         </div>
 
         <div class="row2">
-          <label data-show="sell trade">Giá <span data-show="trade" class="muted small">(tùy chọn, nếu chấp nhận bán)</span><input name="price" type="number" min="0" step="1000" value="${esc(l.price || '')}" placeholder="VD: 150000"></label>
+          <label data-show="sell trade">Giá <span data-show="trade" class="muted small">(tùy chọn, nếu chấp nhận bán)</span><input name="price" type="number" min="0" step="1000" value="${esc(l.price || '')}" placeholder="VD: 120000"></label>
           <label>Thời gian đã sử dụng<input name="usedTime" value="${esc(l.usedTime)}" placeholder="VD: 1 năm, 6 tháng"></label>
         </div>
 
         <label data-show="trade">Muốn đổi lấy *<input name="tradeFor" value="${esc(l.tradeFor || '')}" placeholder="VD: Chuột không dây, sách IELTS..."></label>
 
-        <label>Mô tả<textarea name="desc" rows="4" placeholder="Tình trạng chi tiết, lỗi (nếu có), lý do bán, thời gian có thể gặp...">${esc(l.desc)}</textarea></label>
+        <label>Mô tả tình trạng và lỗi<textarea name="desc" rows="4" placeholder="Tình trạng chi tiết, lỗi (nếu có), phụ kiện đi kèm, lý do bán, thời gian có thể gặp...">${esc(l.desc)}</textarea></label>
 
         <div class="row2">
-          <label>Trường<select name="school">${cl.schools.map(s => opt(s, s, l.school)).join('')}</select></label>
-          <label>Khu trọ / KTX *<select name="area">${cl.areas.map(a => opt(a.id, a.name, l.area)).join('')}</select></label>
+          <label>Trường / nhóm<select name="school">${cl.schools.map(s => opt(s, s, l.school)).join('')}</select></label>
+          <label>Khu vực giao dịch *<select name="area">${cl.areas.map(a => opt(a.id, a.name, l.area)).join('')}</select></label>
         </div>
 
-        <fieldset class="moving-box">
-          <label class="check"><input type="checkbox" name="movingSale" ${l.movingSale ? 'checked' : ''}> 📦 Đây là đồ thanh lý chuyển trọ / ra trường</label>
-          <label class="check" data-show="sell"><input type="checkbox" id="comboToggle" ${l.combo ? 'checked' : ''}> Bán theo combo nhiều món</label>
-          <div id="comboBox" ${l.combo ? '' : 'hidden'} data-show="sell">
-            <p class="small muted">Liệt kê từng món và giá lẻ tham khảo; giá combo nhập ở ô “Giá” phía trên.</p>
-            <div id="comboRows">${(l.combo || []).map(comboRow).join('')}</div>
-            <button type="button" class="btn ghost small" id="addCombo">+ Thêm món</button>
-            <div class="small" id="comboSum"></div>
-          </div>
-        </fieldset>
+        <p class="small muted">Không đăng hàng cấm, hàng không rõ nguồn gốc, giấy tờ hoặc tài khoản mua bán trái phép. Tin vi phạm sẽ bị yêu cầu chỉnh sửa, ẩn hoặc gỡ; tái phạm có thể bị hạn chế quyền đăng.</p>
 
         <div class="form-actions">
           ${editing ? `<button type="button" class="btn danger ghost" id="delBtn">Xóa tin</button>` : '<span></span>'}
@@ -1083,10 +935,6 @@
       <span>📝 Tháng này còn <b>${q.freeLeft}/${P.freePosts}</b> tin miễn phí · <b>${q.credits}</b> lượt đã mua${ok ? '' : ' — <b>cần mua thêm để đăng</b>'}</span>
       <button type="button" class="btn small boost" id="buyPosts">+ Mua ${P.extraPosts.posts} tin – ${money(P.extraPosts.price)}</button>
     </div>`;
-  }
-  function comboRow(i) {
-    i = i || {};
-    return `<div class="combo-row"><input placeholder="Tên món" data-k="name" value="${esc(i.name || '')}"><input type="number" placeholder="Giá lẻ" data-k="price" min="0" step="1000" value="${esc(i.price || '')}"><button type="button" class="icon-btn" data-rm>✕</button></div>`;
   }
 
   function mountPost(q) {
@@ -1110,34 +958,9 @@
     };
     renderImages();
 
-    const comboBox = document.getElementById('comboBox');
-    const comboRows = document.getElementById('comboRows');
-    const comboToggle = document.getElementById('comboToggle');
-    const updateSum = () => {
-      const sum = [...comboRows.querySelectorAll('[data-k=price]')].reduce((s, i) => s + Number(i.value || 0), 0);
-      const price = Number(f.price.value || 0);
-      document.getElementById('comboSum').innerHTML = sum ? `Tổng giá lẻ: <b>${money(sum)}</b>${price && price < sum ? ` · Người mua tiết kiệm <b class="ok-text">${money(sum - price)}</b>` : ''}` : '';
-    };
-    const bindRows = () => {
-      comboRows.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { b.parentElement.remove(); updateSum(); });
-      comboRows.querySelectorAll('input').forEach(i => i.oninput = updateSum);
-    };
-    document.getElementById('addCombo').onclick = () => { comboRows.insertAdjacentHTML('beforeend', comboRow()); bindRows(); };
-    comboToggle.onchange = () => {
-      comboBox.hidden = !comboToggle.checked;
-      if (comboToggle.checked && !comboRows.children.length) { comboRows.innerHTML = comboRow() + comboRow(); bindRows(); }
-      applyType();
-    };
-    f.price.oninput = updateSum;
-    bindRows(); updateSum();
-
     const applyType = () => {
       const t = f.type.value;
-      f.querySelectorAll('[data-show]').forEach(el => {
-        const show = el.dataset.show.split(' ').includes(t);
-        if (el.id === 'comboBox') el.hidden = !show || !comboToggle.checked;
-        else el.hidden = !show;
-      });
+      f.querySelectorAll('[data-show]').forEach(el => { el.hidden = !el.dataset.show.split(' ').includes(t); });
     };
     f.querySelectorAll('input[name=type]').forEach(r => r.onchange = applyType);
     applyType();
@@ -1150,19 +973,14 @@
 
     const submitPost = () => {
       const type = f.type.value;
-      let combo = null;
-      if (type === 'sell' && comboToggle.checked) {
-        combo = [...comboRows.querySelectorAll('.combo-row')].map(r => ({ name: r.querySelector('[data-k=name]').value.trim(), price: Number(r.querySelector('[data-k=price]').value || 0) })).filter(i => i.name);
-        if (combo.length < 2) throw new Error('Combo cần ít nhất 2 món.');
-      }
       const data = {
         type, title: f.title.value.trim(), cat: f.cat.value, condition: f.condition.value,
         price: type === 'free' ? 0 : Number(f.price.value || 0), usedTime: f.usedTime.value.trim(),
         tradeFor: type === 'trade' ? f.tradeFor.value.trim() : '', desc: f.desc.value.trim(),
-        school: f.school.value, area: f.area.value, movingSale: f.movingSale.checked, combo, images: draftImages.slice(),
+        school: f.school.value, area: f.area.value, images: draftImages.slice(),
       };
       const saved = q.edit ? api.updateListing(q.edit, data) : api.createListing(data);
-      toast(q.edit ? 'Đã lưu thay đổi' : 'Đăng tin thành công 🎉', 'ok');
+      toast(q.edit ? 'Đã lưu thay đổi' : 'Đăng tin thành công 🎉 Tin đã hiển thị.', 'ok');
       go('/item/' + saved.id);
     };
     f.onsubmit = e => {
@@ -1204,166 +1022,45 @@
     });
   }
 
-  // ---------- Thanh lý chuyển trọ ----------
-  function viewMoving() {
-    const me = api.currentUser();
-    const cid = api.activeClusterId();
-    const cl = R.cluster(cid);
-    const movers = api.movingSellers(cid);
-    const combos = api.searchListings({ combo: 1, moving: 1 });
-    const partners = R.partners.filter(p => p.cluster === cid);
-
-    return `<div class="container page">
-      <section class="moving-hero">
-        <div>
-          <h1>📦 Thanh lý chuyển trọ</h1>
-          <p>Sắp chuyển phòng hay ra trường? Đăng nhanh từng món hoặc cả combo đồ phòng, người mua ở ngay gần sẽ qua lấy — không phải vận chuyển, không phải bỏ lại.</p>
-          <div class="btn-row">
-            <button class="btn light" id="imMoving">${me && me.moving ? '✏ Cập nhật ngày chuyển đi' : 'Tôi sắp chuyển trọ'}</button>
-            <a href="#/post?moving=1&combo=1" class="btn outline-light">+ Đăng combo thanh lý</a>
-          </div>
-          ${me && me.moving ? `<p class="small">Bạn chuyển đi ngày <b>${fmtDate(me.moving.date)}</b> (còn ${timeLeft(me.moving.date)}).</p>` : ''}
-        </div>
-        <ul class="moving-points">
-          <li>⏱ Hiển thị hạn chuyển đi để người mua chốt nhanh</li>
-          <li>📦 Bán theo combo, giá rẻ hơn mua lẻ</li>
-          <li>🎁 Món không bán được có thể cho tặng</li>
-        </ul>
-      </section>
-
-      <section class="section">
-        <div class="section-head"><h2>Đang thanh lý tại ${esc(cl.name)}</h2></div>
-        ${movers.length ? movers.map(({ user: u, listings }) => {
-          const rt = api.rating(u.id);
-          return `<div class="mover panel">
-            <div class="mover-head">
-              <a href="#/user/${u.id}" class="mover-user">${avatar(u, 'lg')}<div><b>${esc(u.name)}</b> ${verifiedBadge(u, true)}<div class="small muted">${esc(u.school)} · ${esc(areaName(u.cluster, u.area))}</div><div>${stars(rt.avg, rt.count)}</div></div></a>
-              <div class="countdown"><span>Chuyển đi sau</span><b>${timeLeft(u.moving.date)}</b><span class="small">${fmtDate(u.moving.date)}</span></div>
-            </div>
-            ${u.moving.note ? `<p class="muted">“${esc(u.moving.note)}”</p>` : ''}
-            <div class="hscroll">${listings.map(card).join('')}</div>
-          </div>`;
-        }).join('') : '<div class="empty">Hiện chưa có ai thanh lý trong cụm này.</div>'}
-      </section>
-
-      ${combos.length ? `<section class="section"><div class="section-head"><h2>Combo đồ phòng giá tốt</h2></div>${grid(combos)}</section>` : ''}
-
-      <section class="section two-col">
-        <div class="panel">
-          <h3>🙋 Dịch vụ thanh lý phòng trọ</h3>
-          <p class="muted">Không có thời gian? Đội ngũ ReMarket hỗ trợ chụp ảnh, định giá, đăng bán theo combo và tìm người mua giúp bạn.</p>
-          <form id="svcForm" class="form">
-            <div class="row2">
-              <label>Họ tên<input name="name" value="${esc(me ? me.name : '')}" required></label>
-              <label>Số điện thoại<input name="phone" value="${esc(me && me.phone ? me.phone : '')}" required pattern="0[0-9]{9}" placeholder="09xxxxxxxx"></label>
-            </div>
-            <div class="row2">
-              <label>Khu vực<select name="area">${cl.areas.map(a => `<option value="${a.id}" ${me && me.area === a.id ? 'selected' : ''}>${a.name}</option>`).join('')}</select></label>
-              <label>Ngày chuyển dự kiến<input type="date" name="date" required></label>
-            </div>
-            <label>Số lượng đồ ước tính<select name="size"><option>Dưới 5 món</option><option>5–15 món</option><option>Cả phòng</option></select></label>
-            <button class="btn primary">Gửi yêu cầu</button>
-            <p class="small muted">Phí dự kiến: phí cố định hoặc % trên giao dịch thành công (đang thử nghiệm).</p>
-          </form>
-        </div>
-        <div class="panel">
-          <h3>🤝 Đối tác hỗ trợ tại ${esc(cl.name)}</h3>
-          <div class="partners">${partners.map(p => `<div class="partner"><span class="partner-ic">${p.icon}</span><div><b>${esc(p.name)}</b> <span class="badge b-partner">Đối tác</span><div class="small muted">${esc(p.desc)}</div>${p.phone ? `<div class="small">☎ ${esc(p.phone)}</div>` : ''}</div></div>`).join('')}</div>
-          <a href="#/pricing" class="small">Bạn có cửa hàng/dịch vụ? Đăng ký đối tác ${money(P.partner.price)}/${P.partner.unit} →</a>
-        </div>
-      </section>
-    </div>`;
-  }
-  function mountMoving() {
-    document.getElementById('imMoving').onclick = () => {
-      if (!requireLogin('Đăng nhập để bật chế độ thanh lý chuyển trọ.')) return;
-      const me = api.currentUser();
-      const d = me.moving ? new Date(me.moving.date) : new Date(Date.now() + 7 * 864e5);
-      modal('📦 Bật chế độ thanh lý chuyển trọ', `
-        <form id="movForm" class="form">
-          <label>Ngày chuyển đi<input type="date" name="date" value="${d.toISOString().slice(0, 10)}" required></label>
-          <label>Lời nhắn cho người mua<input name="note" value="${esc(me.moving ? me.moving.note : '')}" placeholder="VD: Ra trường, thanh lý toàn bộ đồ phòng"></label>
-          <p class="small muted">Trang cá nhân và các tin thanh lý của bạn sẽ hiển thị hạn chuyển đi.</p>
-          <div class="form-actions">
-            ${me.moving ? '<button type="button" class="btn ghost" id="movOff">Tắt chế độ</button>' : '<span></span>'}
-            <button class="btn primary">Lưu & đăng đồ</button>
-          </div>
-        </form>`, (m, close) => {
-        const f = m.querySelector('#movForm');
-        f.onsubmit = e => {
-          e.preventDefault();
-          api.updateProfile({ moving: { date: new Date(f.date.value + 'T12:00:00').getTime(), note: f.note.value.trim() } });
-          close();
-          toast('Đã bật chế độ thanh lý', 'ok');
-          go('/post' + qs({ moving: 1 }));
-        };
-        const off = m.querySelector('#movOff');
-        if (off) off.onclick = () => { api.updateProfile({ moving: null }); close(); toast('Đã tắt chế độ thanh lý'); render(); };
-      });
-    };
-    document.getElementById('svcForm').onsubmit = e => {
-      e.preventDefault();
-      api.requestService(Object.fromEntries(new FormData(e.target).entries()));
-      e.target.reset();
-      toast('Đã gửi yêu cầu! Chúng tôi sẽ liên hệ trong 24 giờ.', 'ok');
-    };
-  }
-
   // ---------- Trang của tôi ----------
   function viewMe(q) {
     const me = api.currentUser();
     if (!me) return loginWall('Đăng nhập để quản lý tin đăng.');
-    const tab = q.tab || 'listings';
-    const rt = api.rating(me.id);
-    const mine = api.searchListings({ cluster: me.cluster, seller: me.id, includeSold: true, sort: 'new' });
-    const pending = api.pendingReviews();
-    const tabs = [['listings', 'Tin của tôi', mine.length], ['reserved', 'Đang đặt giữ', api.myReservations().filter(l => l.status === 'reserved').length], ['reviews', 'Đánh giá', pending.length], ['payments', 'Gói & thanh toán', 0], ['account', 'Tài khoản & xác thực', 0]];
+    const admin = api.isAdmin(me);
+    const tab = admin ? 'account' : (q.tab || 'listings');
+    const mine = admin ? [] : api.searchListings({ seller: me.id, statuses: ['available', 'expired', 'hidden', 'removed', 'sold'], sort: 'new' });
+    const tabs = admin ? [['account', 'Tài khoản', 0]] : [['listings', 'Tin của tôi', mine.length], ['payments', 'Gói & thanh toán', 0], ['account', 'Tài khoản', 0]];
 
     let body = '';
     if (tab === 'listings') {
-      const groups = [['available', 'Đang đăng'], ['reserved', 'Đang được giữ'], ['sold', 'Đã giao dịch']];
-      body = mine.length ? groups.map(([s, t]) => {
+      const groups = [
+        ['available', 'Đang hiển thị'],
+        ['expired', `Đã tự ẩn (quá ${R.listingDays} ngày chưa cập nhật)`],
+        ['hidden', 'Bị ẩn – cần chỉnh sửa'],
+        ['sold', 'Đã bán / cho tặng / trao đổi'],
+        ['removed', 'Bị gỡ do vi phạm'],
+      ];
+      body = `${me.restricted ? '<div class="notice warn">Tài khoản đang bị hạn chế đăng tin mới do vi phạm quy định nhiều lần.</div>' : ''}` + (mine.length ? groups.map(([s, t]) => {
         const ls = mine.filter(l => l.status === s);
         if (!ls.length) return '';
         return `<h3 class="group-title">${t} <span class="muted">(${ls.length})</span></h3>
-          <div class="rows">${ls.map(l => {
-            const rb = l.reservedBy ? api.getUser(l.reservedBy) : null;
-            const buyer = l.soldTo ? api.getUser(l.soldTo) : null;
-            return `<div class="row-item">
+          <div class="rows">${ls.map(l => `<div class="row-item">
               <a href="#/item/${l.id}" class="row-thumb">${thumb(l)}</a>
               <div class="row-main">
                 <a href="#/item/${l.id}"><b>${esc(l.title)}</b></a>
                 <div>${priceLabel(l)} ${typeBadge[l.type]} ${l.boosted ? `<span class="badge b-boost">⚡ còn ${timeLeft(l.boostUntil)}</span>` : ''}</div>
                 <div class="small muted">👁 ${l.views} · Đăng ${timeAgo(l.createdAt)}
-                  ${rb ? ` · 📌 ${esc(rb.name)} giữ, còn ${timeLeft(l.reservedUntil)} · Hẹn: ${esc(l.meetPoint)}` : ''}
-                  ${buyer ? ` · Người mua: ${esc(buyer.name)}` : ''}</div>
+                  ${s === 'available' ? ` · Tự ẩn sau ${timeLeft(l.expiresAt)}` : ''}
+                  ${(s === 'hidden' || s === 'removed') && l.modNote ? ` · Lý do: ${esc(l.modNote)}` : ''}</div>
               </div>
               <div class="row-actions">
-                ${s !== 'sold' ? `<a class="btn ghost small" href="#/post?edit=${l.id}">Sửa</a><button class="btn boost small" data-boost="${l.id}">⚡ Đẩy</button><button class="btn primary small" data-sold="${l.id}">Đã giao dịch</button>` : `<button class="btn ghost small" data-reopen="${l.id}">Mở bán lại</button>`}
-                ${s === 'reserved' ? `<button class="btn ghost small" data-unres="${l.id}">Hủy giữ</button>` : ''}
+                ${s === 'available' ? `<a class="btn ghost small" href="#/post?edit=${l.id}">Sửa</a><button class="btn ghost small" data-renew="${l.id}">↻ Gia hạn</button><button class="btn boost small" data-boost="${l.id}">⚡ Đẩy</button><button class="btn primary small" data-sold="${l.id}">${doneLabel(l)}</button>` : ''}
+                ${s === 'expired' ? `<button class="btn primary small" data-renew="${l.id}">↻ Gia hạn miễn phí</button><button class="btn ghost small" data-sold="${l.id}">${doneLabel(l)}</button>` : ''}
+                ${s === 'hidden' ? `<a class="btn primary small" href="#/post?edit=${l.id}">Sửa tin</a>` : ''}
+                ${s === 'sold' ? `<button class="btn ghost small" data-reopen="${l.id}">Mở bán lại</button>` : ''}
               </div>
-            </div>`;
-          }).join('')}</div>`;
-      }).join('') : `<div class="empty">Bạn chưa có tin nào. <a href="#/post">Đăng tin đầu tiên</a></div>`;
-    } else if (tab === 'reserved') {
-      const rs = api.myReservations();
-      body = rs.length ? `<div class="rows">${rs.map(l => {
-        const s = api.getUser(l.seller);
-        return `<div class="row-item">
-          <a href="#/item/${l.id}" class="row-thumb">${thumb(l)}</a>
-          <div class="row-main"><a href="#/item/${l.id}"><b>${esc(l.title)}</b></a><div>${priceLabel(l)}</div>
-            <div class="small muted">Người bán: ${esc(s.name)} · ${l.status === 'reserved' ? `Hẹn tại <b>${esc(l.meetPoint)}</b> · còn ${timeLeft(l.reservedUntil)}` : '✔ Đã nhận hàng'}</div></div>
-          <div class="row-actions">${l.status === 'reserved' ? `<button class="btn primary small" data-msg="${l.id}">Nhắn tin</button><button class="btn ghost small" data-unres="${l.id}">Hủy giữ</button>` : ''}</div>
-        </div>`;
-      }).join('')}</div>` : '<div class="empty">Bạn chưa đặt giữ sản phẩm nào.</div>';
-    } else if (tab === 'reviews') {
-      const received = api.reviewsFor(me.id);
-      body = `${pending.length ? `<h3 class="group-title">Chờ bạn đánh giá</h3><div class="rows">${pending.map(p => `
-          <div class="row-item"><a href="#/item/${p.listing.id}" class="row-thumb">${thumb(p.listing)}</a>
-            <div class="row-main"><b>${esc(p.listing.title)}</b><div class="small muted">${p.listing.seller === me.id ? 'Người mua' : 'Người bán'}: ${esc(p.other.name)}</div></div>
-            <div class="row-actions"><button class="btn primary small" data-review="${p.listing.id}" data-to="${p.other.id}">⭐ Đánh giá</button></div></div>`).join('')}</div>` : ''}
-        <h3 class="group-title">Đánh giá về bạn <span class="muted">${stars(rt.avg, rt.count)}</span></h3>
-        ${reviewList(received)}`;
+            </div>`).join('')}</div>`;
+      }).join('') : `<div class="empty">Bạn chưa có tin nào. <a href="#/post">Đăng tin đầu tiên</a></div>`);
     } else if (tab === 'payments') {
       const qt = api.quota();
       const ps = api.myPayments();
@@ -1372,8 +1069,8 @@
         <div class="panel"><h3>📝 Lượt đăng tin</h3>
           <div class="quota-big"><div><b>${qt.freeLeft}/${P.freePosts}</b><span>tin miễn phí còn lại tháng này</span></div><div><b>${qt.credits}</b><span>lượt đã mua</span></div></div>
           <button class="btn boost block" id="buyPosts2">+ Mua ${P.extraPosts.posts} tin – ${money(P.extraPosts.price)}</button></div>
-        <div class="panel"><h3>⚡ Tin đang nổi bật</h3>
-          ${hot.length ? hot.map(l => `<div class="mini-row"><a href="#/item/${l.id}" class="ellipsis">${esc(l.title)}</a><span class="badge b-boost">còn ${timeLeft(l.boostUntil)}</span></div>`).join('') : `<p class="muted small">Chưa có tin nào nổi bật. Chỉ ${money(P.featured.price)}/${P.featured.days} ngày.</p>`}
+        <div class="panel"><h3>⚡ Tin đang ưu tiên</h3>
+          ${hot.length ? hot.map(l => `<div class="mini-row"><a href="#/item/${l.id}" class="ellipsis">${esc(l.title)}</a><span class="badge b-boost">còn ${timeLeft(l.boostUntil)}</span></div>`).join('') : `<p class="muted small">Chưa có tin nào ưu tiên. Chỉ ${money(P.featured.price)}/${P.featured.days} ngày.</p>`}
           <a href="#/pricing" class="btn ghost block small">Xem bảng giá</a></div>
       </div>
       <h3 class="group-title">Lịch sử thanh toán</h3>
@@ -1381,23 +1078,27 @@
         ${ps.map(x => `<tr><td>${fmtDate(x.at)} ${fmtTime(x.at)}</td><td>${esc(x.desc)}${x.listingId ? ` · <a href="#/item/${x.listingId}">xem tin</a>` : ''}</td><td>${esc(x.method)}</td><td class="r"><b>${money(x.amount)}</b></td></tr>`).join('')}
       </table></div>` : '<div class="empty">Chưa có giao dịch thanh toán nào.</div>'}`;
     } else {
-      const cl = R.cluster(me.cluster);
+      const cl = R.cluster(CID);
       body = `<div class="two-col">
         <form id="profileForm" class="form panel">
           <h3>Thông tin cá nhân</h3>
           <label>Họ tên<input name="name" value="${esc(me.name)}" required></label>
           <label>Giới thiệu<textarea name="bio" rows="2">${esc(me.bio || '')}</textarea></label>
-          <label>Cụm<select name="cluster">${R.clusters.map(c => `<option value="${c.id}" ${c.id === me.cluster ? 'selected' : ''}>${c.name}</option>`).join('')}</select></label>
           <div class="row2">
-            <label>Trường<select name="school">${cl.schools.map(s => `<option ${s === me.school ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+            <label>Trường / nhóm<select name="school">${cl.schools.map(s => `<option ${s === me.school ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
             <label>Khu trọ / KTX<select name="area">${cl.areas.map(a => `<option value="${a.id}" ${a.id === me.area ? 'selected' : ''}>${a.name}</option>`).join('')}</select></label>
           </div>
+          <label>Số điện thoại liên hệ <span class="small muted">(không bắt buộc)</span><input name="phone" value="${esc(me.phone || '')}" placeholder="09xxxxxxxx"></label>
+          <label class="check"><input type="checkbox" name="showPhone" ${me.showPhone ? 'checked' : ''}> Hiển thị số điện thoại trên tin đăng của tôi</label>
           <button class="btn primary">Lưu</button>
         </form>
         <div class="panel">
           <h3>Xác thực tài khoản</h3>
-          <p class="muted small">Tài khoản đã xác thực được ưu tiên hiển thị và được người mua tin tưởng hơn.</p>
-          ${verifyBlock(me)}
+          <div class="verify-item ${me.emailVerified ? 'done' : ''}">
+            <div><b>✉ Email</b><div class="small muted">${esc(me.email)}</div></div>
+            ${me.emailVerified ? '<span class="vbadge ok">✔ Đã xác thực</span>' : '<a class="btn primary small" href="#/verify">Xác thực</a>'}
+          </div>
+          <p class="small muted">ReMarket chỉ cần email để quản lý tài khoản, không yêu cầu email trường, ảnh căn cước hay số điện thoại. Xác thực email không đồng nghĩa người dùng chắc chắn trung thực: hãy kiểm tra hàng trước khi trả tiền.</p>
         </div>
       </div>`;
     }
@@ -1405,154 +1106,151 @@
     return `<div class="container page">
       <div class="profile-head panel">
         ${avatar(me, 'xl')}
-        <div class="grow"><h1>${esc(me.name)}</h1><div>${verifiedBadge(me)} ${stars(rt.avg, rt.count)}</div>
-          <div class="small muted">${esc(me.school)} · ${esc(areaName(me.cluster, me.area))} · Cụm ${R.cluster(me.cluster).name}</div></div>
-        <a href="#/post" class="btn primary">+ Đăng tin</a>
+        <div class="grow"><h1>${esc(me.name)}</h1><div>${emailBadge(me)}</div>
+          <div class="small muted">${esc(me.school)} · ${esc(areaName(me.area))} · Hòa Lạc</div></div>
+        ${admin ? '<a href="#/admin" class="btn primary">🛡 Kiểm duyệt</a>' : '<a href="#/post" class="btn primary">+ Đăng tin</a>'}
       </div>
-      <div class="tabs">${tabs.map(([k, t, n]) => `<a href="${k === 'reviews' ? '#/reviews' : '#/me?tab=' + k}" class="${k === tab ? 'active' : ''}">${t}${n ? ` <span class="count">${n}</span>` : ''}</a>`).join('')}</div>
+      <div class="tabs">${tabs.map(([k, t, n]) => `<a href="#/me?tab=${k}" class="${k === tab ? 'active' : ''}">${t}${n ? ` <span class="count">${n}</span>` : ''}</a>`).join('')}</div>
       <div class="tab-body">${body}</div>
     </div>`;
-  }
-
-  function verifyBlock(me) {
-    return `
-      <div class="verify-item ${me.verified.student ? 'done' : ''}">
-        <div><b>🎓 Sinh viên</b><div class="small muted">Email trường (.edu.vn) hoặc ảnh thẻ sinh viên</div></div>
-        ${me.verified.student ? '<span class="vbadge ok">✔ Đã xác thực</span>' : '<button class="btn primary small" id="vStudent">Xác thực</button>'}
-      </div>
-      <div class="verify-item ${me.verified.phone ? 'done' : ''}">
-        <div><b>📱 Số điện thoại</b><div class="small muted">Nhận mã OTP qua SMS</div></div>
-        ${me.verified.phone ? '<span class="vbadge ok">✔ Đã xác thực</span>' : '<button class="btn primary small" id="vPhone">Xác thực</button>'}
-      </div>`;
-  }
-  function bindVerify(after) {
-    const vs = document.getElementById('vStudent');
-    if (vs) vs.onclick = () => modal('🎓 Xác thực sinh viên', `
-      <div class="seg" id="vTabs"><label><input type="radio" name="vm" value="email" checked><span>Email trường</span></label><label><input type="radio" name="vm" value="card"><span>Ảnh thẻ SV</span></label></div>
-      <form id="vEmail" class="form">
-        <label>Email sinh viên<input name="email" value="${esc(/\.edu\.vn$/i.test(api.currentUser().email) ? api.currentUser().email : '')}" placeholder="ten@fpt.edu.vn"></label>
-        <div class="row2"><label>Mã xác thực<input name="code" placeholder="6 số"></label><label>&nbsp;<button type="button" class="btn ghost" id="sendCode">Gửi mã</button></label></div>
-        <p class="small muted">Bản demo: mã luôn là <b>123456</b>.</p>
-        <button class="btn primary block">Xác thực</button>
-      </form>
-      <form id="vCard" class="form" hidden>
-        <label>Ảnh mặt trước thẻ sinh viên<input type="file" name="card" accept="image/*" required></label>
-        <p class="small muted">Ảnh chỉ dùng để đối chiếu và sẽ được xóa sau khi duyệt. (Demo: duyệt tự động.)</p>
-        <button class="btn primary block">Gửi duyệt</button>
-      </form>`, (m, close) => {
-      m.querySelectorAll('input[name=vm]').forEach(r => r.onchange = () => { m.querySelector('#vEmail').hidden = r.value !== 'email' || !r.checked; m.querySelector('#vCard').hidden = r.value !== 'card' || !r.checked; });
-      m.querySelector('#sendCode').onclick = () => toast('Đã gửi mã tới email (demo: 123456)');
-      m.querySelector('#vEmail').onsubmit = guard(e => { e.preventDefault(); api.verifyStudentEmail(e.target.email.value, e.target.code.value.trim()); close(); toast('Xác thực sinh viên thành công ✔', 'ok'); after(); });
-      m.querySelector('#vCard').onsubmit = e => {
-        e.preventDefault();
-        const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Đang duyệt...';
-        setTimeout(() => { api.verifyStudentCard(); close(); toast('Thẻ sinh viên đã được duyệt ✔', 'ok'); after(); }, 1200);
-      };
-    });
-    const vp = document.getElementById('vPhone');
-    if (vp) vp.onclick = () => modal('📱 Xác thực số điện thoại', `
-      <form id="vPhoneForm" class="form">
-        <label>Số điện thoại<input name="phone" placeholder="09xxxxxxxx"></label>
-        <div class="row2"><label>Mã OTP<input name="code" placeholder="6 số"></label><label>&nbsp;<button type="button" class="btn ghost" id="sendOtp">Gửi OTP</button></label></div>
-        <p class="small muted">Bản demo: mã luôn là <b>123456</b>.</p>
-        <button class="btn primary block">Xác thực</button>
-      </form>`, (m, close) => {
-      m.querySelector('#sendOtp').onclick = () => toast('Đã gửi OTP (demo: 123456)');
-      m.querySelector('#vPhoneForm').onsubmit = guard(e => { e.preventDefault(); api.verifyPhone(e.target.phone.value, e.target.code.value.trim()); close(); toast('Đã xác thực số điện thoại ✔', 'ok'); after(); });
-    });
   }
 
   function mountMe() {
     const on = (sel, fn) => document.querySelectorAll(sel).forEach(b => b.onclick = guard(() => fn(b)));
     on('[data-boost]', b => openServices(api.getListing(b.dataset.boost)));
     on('[data-sold]', b => openMarkSold(api.getListing(b.dataset.sold)));
-    on('[data-reopen]', b => { api.reopen(b.dataset.reopen); toast('Đã mở bán lại', 'ok'); render(); });
-    on('[data-unres]', b => { if (confirm('Hủy giữ chỗ?')) { api.cancelReservation(b.dataset.unres); toast('Đã hủy giữ chỗ'); render(); } });
-    on('[data-msg]', b => go('/chat/' + api.startConversation(b.dataset.msg).id));
-    on('[data-review]', b => openReview(b.dataset.review, b.dataset.to));
+    on('[data-reopen]', b => { api.reopen(b.dataset.reopen); toast('Tin đã hiển thị lại', 'ok'); render(); });
+    on('[data-renew]', b => { api.renew(b.dataset.renew); toast(`Đã gia hạn miễn phí ${R.listingDays} ngày`, 'ok'); render(); });
     const bp = document.getElementById('buyPosts2');
     if (bp) bp.onclick = () => openBuyPosts(render);
 
     const pf = document.getElementById('profileForm');
     if (pf) {
-      pf.cluster.onchange = () => {
-        const cl = R.cluster(pf.cluster.value);
-        pf.school.innerHTML = cl.schools.map(s => `<option>${esc(s)}</option>`).join('');
-        pf.area.innerHTML = cl.areas.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
-      };
-      pf.onsubmit = e => {
+      pf.onsubmit = guard(e => {
         e.preventDefault();
-        api.updateProfile({ name: pf.name.value.trim(), bio: pf.bio.value.trim(), cluster: pf.cluster.value, school: pf.school.value, area: pf.area.value });
+        api.updateProfile({ name: pf.name.value.trim(), bio: pf.bio.value.trim(), school: pf.school.value, area: pf.area.value, phone: pf.phone.value.trim(), showPhone: pf.showPhone.checked && !!pf.phone.value.trim() });
         toast('Đã lưu hồ sơ', 'ok');
         render();
-      };
+      });
     }
-    bindVerify(render);
   }
 
-  function openReview(listingId, toId) {
-    const u = api.getUser(toId);
-    const l = api.getListing(listingId);
-    modal('⭐ Đánh giá giao dịch', `
-      <div class="review-who">${avatar(u, 'lg')}<div><b>${esc(u.name)}</b><div class="small muted">${esc(l.title)}</div></div></div>
-      <form id="revForm" class="form">
-        <div class="star-input" id="starInput">${[1, 2, 3, 4, 5].map(n => `<button type="button" data-n="${n}">★</button>`).join('')}</div>
-        <div class="chips">${['Đúng mô tả', 'Đúng hẹn', 'Thân thiện', 'Giá hợp lý'].map(t => `<button type="button" class="chip" data-t="${t}">${t}</button>`).join('')}</div>
-        <label>Nhận xét<textarea name="text" rows="3" placeholder="Chia sẻ trải nghiệm giao dịch..."></textarea></label>
-        <button class="btn primary block">Gửi đánh giá</button>
+  // ---------- Kiểm duyệt (quản trị viên) ----------
+  function viewAdmin(q) {
+    const me = api.currentUser();
+    if (!me) return loginWall('Đăng nhập bằng tài khoản quản trị để kiểm duyệt.');
+    if (!api.isAdmin(me)) return notFound('Chỉ quản trị viên mới truy cập được trang này.');
+    const st = api.adminStats();
+    const all = api.adminReports();
+    const tab = q.tab || 'open';
+    const open = all.filter(r => r.status === 'open');
+    const done = all.filter(r => r.status === 'resolved');
+    const moderated = api.moderatedListings();
+    const actionName = { edit: 'Ẩn, yêu cầu chỉnh sửa', remove: 'Gỡ tin', dismiss: 'Không vi phạm' };
+
+    const reportRow = r => {
+      const l = r.listing;
+      const seller = l ? api.getUser(l.seller) : null;
+      const deadline = r.at + 24 * 3600 * 1000;
+      const viol = seller ? api.violationCount(seller.id) : 0;
+      return `<div class="row-item">
+        ${l ? `<a href="#/item/${l.id}" class="row-thumb">${thumb(l)}</a>` : ''}
+        <div class="row-main">
+          ${l ? `<a href="#/item/${l.id}"><b>${esc(l.title)}</b></a>` : '<b>Tin đã bị xóa</b>'}
+          <div><span class="badge b-sell">🚩 ${esc(r.reason)}</span> ${l ? priceLabel(l) : ''}</div>
+          ${r.note ? `<div class="small">“${esc(r.note)}”</div>` : ''}
+          <div class="small muted">Người báo cáo: ${esc(r.reporter ? r.reporter.name : 'Ẩn danh')} · ${timeAgo(r.at)}
+            ${seller ? ` · Người bán: <a href="#/user/${seller.id}">${esc(seller.name)}</a>${viol ? ` (đã vi phạm ${viol} lần)` : ''}${seller.restricted ? ' · <b>đang bị hạn chế</b>' : ''}` : ''}</div>
+          ${r.status === 'open'
+            ? `<div class="small ${deadline < Date.now() ? 'bold' : 'muted'}">⏱ ${deadline > Date.now() ? `Còn ${timeLeft(deadline)} trong hạn xử lý 24 giờ` : 'Đã quá hạn xử lý 24 giờ'}</div>`
+            : `<div class="small muted">✔ ${actionName[r.action] || r.action} · xử lý sau ${Math.max(1, Math.round((r.handledAt - r.at) / 3600000))} giờ${r.modNote ? ` · ${esc(r.modNote)}` : ''}</div>`}
+        </div>
+        ${r.status === 'open' && l ? `<div class="row-actions"><button class="btn primary small" data-mod="${r.id}">Xử lý</button></div>` : ''}
+      </div>`;
+    };
+
+    let body;
+    if (tab === 'open') body = open.length ? `<div class="rows">${open.map(reportRow).join('')}</div>` : '<div class="empty">Không có báo cáo nào chờ xử lý 🎉</div>';
+    else if (tab === 'done') body = done.length ? `<div class="rows">${done.map(reportRow).join('')}</div>` : '<div class="empty">Chưa có báo cáo nào được xử lý.</div>';
+    else body = moderated.length ? `<div class="rows">${moderated.map(l => {
+      const seller = api.getUser(l.seller);
+      return `<div class="row-item"><a href="#/item/${l.id}" class="row-thumb">${thumb(l)}</a>
+        <div class="row-main"><a href="#/item/${l.id}"><b>${esc(l.title)}</b></a>
+          <div class="small muted">${l.status === 'removed' ? 'Đã gỡ' : 'Đang ẩn chờ chỉnh sửa'} · ${esc(l.modNote || '')} · Người bán: ${esc(seller ? seller.name : '')}</div></div>
+        <div class="row-actions"><button class="btn ghost small" data-restore="${l.id}">Khôi phục</button>
+          ${seller ? `<button class="btn ghost small" data-restrict="${seller.id}" data-v="${seller.restricted ? '' : '1'}">${seller.restricted ? 'Bỏ hạn chế' : 'Hạn chế đăng tin'}</button>` : ''}</div></div>`;
+    }).join('')}</div>` : '<div class="empty">Không có tin nào đang bị ẩn hoặc gỡ.</div>';
+
+    return `<div class="container page">
+      <h1>🛡 Kiểm duyệt sau đăng</h1>
+      <p class="muted">Tin đăng hiển thị ngay để người bán không phải chờ duyệt. Quản trị viên tiếp nhận báo cáo, đối chiếu quy định và xử lý trong vòng 24 giờ.</p>
+      <div class="quota-big panel">
+        <div><b>${st.open}</b><span>báo cáo chờ xử lý</span></div>
+        <div><b>${st.within24}%</b><span>xử lý trong 24 giờ</span></div>
+        <div><b>${st.avgHours} giờ</b><span>thời gian xử lý trung bình</span></div>
+        <div><b>${st.activeListings}</b><span>tin đang hiển thị</span></div>
+        <div><b>${st.restricted}</b><span>tài khoản bị hạn chế</span></div>
+      </div>
+      <div class="tabs">
+        <a href="#/admin?tab=open" class="${tab === 'open' ? 'active' : ''}">Chờ xử lý${open.length ? ` <span class="count">${open.length}</span>` : ''}</a>
+        <a href="#/admin?tab=done" class="${tab === 'done' ? 'active' : ''}">Đã xử lý</a>
+        <a href="#/admin?tab=listings" class="${tab === 'listings' ? 'active' : ''}">Tin bị ẩn / gỡ</a>
+      </div>
+      <div class="tab-body">${body}</div>
+    </div>`;
+  }
+  function mountAdmin() {
+    const on = (sel, fn) => document.querySelectorAll(sel).forEach(b => b.onclick = guard(() => fn(b)));
+    on('[data-mod]', b => openModerate(b.dataset.mod));
+    on('[data-restore]', b => { api.restoreListing(b.dataset.restore); toast('Đã khôi phục tin', 'ok'); render(); });
+    on('[data-restrict]', b => { api.setRestricted(b.dataset.restrict, !!b.dataset.v); toast(b.dataset.v ? 'Đã hạn chế đăng tin' : 'Đã bỏ hạn chế', 'ok'); render(); });
+  }
+  function openModerate(reportId) {
+    const r = api.adminReports().find(x => x.id === reportId);
+    if (!r || !r.listing) return;
+    const seller = api.getUser(r.listing.seller);
+    const viol = api.violationCount(seller.id);
+    modal('🛡 Xử lý báo cáo', `
+      <p class="muted">“<b>${esc(r.listing.title)}</b>” · ${esc(r.reason)}</p>
+      <form id="modForm" class="form">
+        <div class="radio-list">
+          <label class="radio-row"><input type="radio" name="action" value="edit" checked> Ẩn tin, yêu cầu người bán chỉnh sửa</label>
+          <label class="radio-row"><input type="radio" name="action" value="remove"> Gỡ tin</label>
+          <label class="radio-row"><input type="radio" name="action" value="dismiss"> Không vi phạm, giữ nguyên</label>
+        </div>
+        <label>Lý do gửi người bán<input name="note" value="${esc(r.reason.startsWith('Đòi đặt cọc') ? 'Yêu cầu chuyển cọc trước, ảnh không phải ảnh thật, từ chối cho xem hàng.' : '')}" placeholder="VD: Ảnh lấy trên mạng, đòi đặt cọc trước"></label>
+        <label class="check"><input type="checkbox" name="restrict" ${viol ? 'checked' : ''}> Hạn chế quyền đăng tin của ${esc(seller.name)}${viol ? ` (đã vi phạm ${viol} lần)` : ''}</label>
+        <button class="btn primary block">Xác nhận</button>
       </form>`, (m, close) => {
-      let n = 5;
-      const paint = () => m.querySelectorAll('#starInput button').forEach(b => b.classList.toggle('on', Number(b.dataset.n) <= n));
-      m.querySelectorAll('#starInput button').forEach(b => b.onclick = () => { n = Number(b.dataset.n); paint(); });
-      paint();
-      const ta = m.querySelector('textarea');
-      m.querySelectorAll('.chip').forEach(c => c.onclick = () => { ta.value = (ta.value ? ta.value.replace(/[.\s]*$/, '') + '. ' : '') + c.dataset.t; });
-      m.querySelector('#revForm').onsubmit = guard(e => {
+      m.querySelector('#modForm').onsubmit = guard(e => {
         e.preventDefault();
-        api.addReview(listingId, toId, n, ta.value);
+        const f = e.target;
+        api.moderate(reportId, f.action.value, f.note.value, f.action.value !== 'dismiss' && f.restrict.checked);
         close();
-        toast('Cảm ơn bạn đã đánh giá!', 'ok');
+        toast({ edit: 'Đã ẩn tin và yêu cầu chỉnh sửa', remove: 'Đã gỡ tin', dismiss: 'Đã đóng báo cáo' }[f.action.value], 'ok');
         render();
       });
     });
-  }
-
-  // Tên món đồ của giao dịch được đánh giá
-  function reviewItem(r) {
-    const l = r.listingId ? api.getListing(r.listingId) : null;
-    return l ? l.title : (r.item || '');
-  }
-  function reviewList(rs, written) {
-    if (!rs.length) return '<div class="empty">Chưa có đánh giá nào.</div>';
-    return `<div class="reviews">${rs.map(r => {
-      const u = api.getUser(written ? r.to : r.from);
-      const l = r.listingId ? api.getListing(r.listingId) : null;
-      const item = !l && r.item ? ` · 🛍 ${esc(r.item)}` : '';
-      return `<div class="review">${avatar(u, 'sm')}<div><b>${written ? 'Bạn → ' : ''}${esc(u ? u.name : 'Người dùng')}</b> <span class="stars">${'★'.repeat(r.stars)}<span class="off">${'★'.repeat(5 - r.stars)}</span></span>
-        <div>${esc(r.text || '(Không có nhận xét)')}</div><div class="small muted">${timeAgo(r.createdAt)}${l ? ` · 🛍 <a href="#/item/${l.id}">${esc(l.title)}</a>` : item}</div></div></div>`;
-    }).join('')}</div>`;
   }
 
   // ---------- Trang cá nhân công khai ----------
   function viewUser(id) {
     const u = api.getUser(id);
     if (!u) return notFound('Không tìm thấy người dùng.');
-    const rt = api.rating(u.id);
-    const ls = api.searchListings({ cluster: u.cluster, seller: u.id, sort: 'new' });
-    const sold = api.searchListings({ cluster: u.cluster, seller: u.id, includeSold: true }).filter(l => l.status === 'sold').length;
+    const ls = api.searchListings({ seller: u.id, sort: 'new' });
+    const sold = api.searchListings({ seller: u.id, statuses: ['sold'] }).length;
+    const me = api.currentUser();
     return `<div class="container page">
       <div class="profile-head panel">
         ${avatar(u, 'xl')}
-        <div class="grow"><h1>${esc(u.name)}</h1><div>${verifiedBadge(u)} ${stars(rt.avg, rt.count)}</div>
-          <div class="small muted">${esc(u.school)} · ${esc(areaName(u.cluster, u.area))} · Cụm ${R.cluster(u.cluster).name} · Tham gia ${fmtDate(u.joinedAt)}</div>
+        <div class="grow"><h1>${esc(u.name)}</h1><div>${emailBadge(u)}</div>
+          <div class="small muted">${esc(u.school)} · ${esc(areaName(u.area))} · Tham gia ${fmtDate(u.joinedAt)}</div>
           ${u.bio ? `<p>${esc(u.bio)}</p>` : ''}
-          ${u.moving && u.moving.date > Date.now() ? `<div class="notice warn">📦 Đang thanh lý chuyển trọ — chuyển đi sau ${timeLeft(u.moving.date)}</div>` : ''}
-          ${api.currentUser() && api.currentUser().id === u.id ? '' : sellerContact(u)}
+          ${me && me.id === u.id ? '' : sellerContact(u)}
         </div>
-        <div class="profile-stats"><div><b>${ls.length}</b><span>đang đăng</span></div><div><b>${sold}</b><span>đã giao dịch</span></div><div><b>${rt.count}</b><span>đánh giá</span></div></div>
+        <div class="profile-stats"><div><b>${ls.length}</b><span>đang hiển thị</span></div><div><b>${sold}</b><span>đã bán / cho tặng</span></div></div>
       </div>
-      <section class="section"><div class="section-head"><h2>Tin đang đăng</h2></div>${grid(ls, 'Người dùng chưa có tin nào đang đăng.')}</section>
-      <section class="section"><div class="section-head"><h2>Đánh giá</h2></div>${reviewList(api.reviewsFor(u.id))}</section>
+      <section class="section"><div class="section-head"><h2>Tin đang hiển thị</h2></div>${grid(ls, 'Người dùng chưa có tin nào đang hiển thị.')}</section>
     </div>`;
   }
 
@@ -1582,14 +1280,16 @@
     if (cur) {
       const other = api.getUser(cur.members.find(m => m !== me.id));
       const l = api.getListing(cur.listingId);
+      const statusText = l ? (l.status === 'available' ? 'Còn hàng' : statusOverlay(l)) : '';
       let lastDay = '';
       pane = `
         <div class="chat-head">
           <a href="#/chat" class="icon-btn show-sm">←</a>
-          <a href="#/user/${other.id}" class="chat-user">${avatar(other)}<div><b>${esc(other.name)}</b><div class="small">${verifiedBadge(other, true)} ${esc(other.school)}</div></div></a>
+          <a href="#/user/${other.id}" class="chat-user">${avatar(other)}<div><b>${esc(other.name)}</b><div class="small">${esc(other.school)}</div></div></a>
         </div>
         ${l ? `<a href="#/item/${l.id}" class="chat-listing">${thumb(l, 'xs')}<div><div class="ellipsis">${esc(l.title)}</div>${priceLabel(l)}</div>
-          <span class="badge ${l.status === 'available' ? 'b-free' : l.status === 'reserved' ? 'b-trade' : 'b-sell'}">${{ available: 'Còn hàng', reserved: 'Đang giữ', sold: 'Đã giao dịch' }[l.status]}</span></a>` : ''}
+          <span class="badge ${l.status === 'available' ? 'b-free' : 'b-sell'}">${statusText}</span></a>` : ''}
+        <div class="notice small">🛡 Gặp ở nơi công cộng, kiểm tra hàng rồi mới trả tiền. Không chuyển cọc cho người lạ.</div>
         <div class="messages" id="messages">
           ${cur.messages.map(m => {
             const day = fmtDate(m.at);
@@ -1632,20 +1332,21 @@
     f.text.focus();
   }
 
-  // ---------- Đăng nhập / Đăng ký ----------
+  // ---------- Đăng nhập / Đăng ký / Xác thực email ----------
   function viewLogin(q) {
-    const demos = api.allUsers().filter(u => ['u1', 'u4', 'u6'].includes(u.id));
+    const demos = ['u5', 'u4', 'u11', 'u0', 'u1'].map(api.getUser).filter(Boolean);
+    const roleOf = { u5: 'Người bán – sắp ra trường', u4: 'Người mua – tân sinh viên', u11: 'Người bán đáng ngờ (Màn 5)', u0: 'Quản trị viên kiểm duyệt', u1: 'Người bán có tin đã tự ẩn' };
     return `<div class="container page auth">
       <div class="panel auth-card">
         <h1>Đăng nhập</h1>
         <form id="loginForm" class="form">
-          <label>Email<input name="email" type="email" required placeholder="ten@fpt.edu.vn"></label>
+          <label>Email<input name="email" type="email" required placeholder="ten@gmail.com"></label>
           <label>Mật khẩu<input name="password" type="password" required></label>
           <button class="btn primary block">Đăng nhập</button>
         </form>
         <p class="center small">Chưa có tài khoản? <a href="#/register${qs({ next: q.next })}">Đăng ký</a></p>
         <div class="divider"><span>hoặc dùng tài khoản demo</span></div>
-        <div class="demo-list">${demos.map(u => `<button class="demo" data-id="${u.id}">${avatar(u)}<div><b>${esc(u.name)}</b><div class="small muted">${R.cluster(u.cluster).name} · ${esc(u.school)} ${u.verified.student ? '' : '· chưa xác thực'}</div></div></button>`).join('')}</div>
+        <div class="demo-list">${demos.map(u => `<button class="demo" data-id="${u.id}">${avatar(u)}<div><b>${esc(u.name)}</b><div class="small muted">${roleOf[u.id]}</div></div></button>`).join('')}</div>
       </div>
     </div>`;
   }
@@ -1655,31 +1356,28 @@
       e.preventDefault();
       const u = api.login(e.target.email.value, e.target.password.value);
       toast('Xin chào ' + u.name, 'ok');
-      go(next);
+      go(api.isAdmin(u) && next === '/' ? '/admin' : next);
     });
-    document.querySelectorAll('.demo').forEach(b => b.onclick = () => { const u = api.loginAs(b.dataset.id); toast('Xin chào ' + u.name, 'ok'); go(next); });
+    document.querySelectorAll('.demo').forEach(b => b.onclick = () => { const u = api.loginAs(b.dataset.id); toast('Xin chào ' + u.name, 'ok'); go(api.isAdmin(u) && next === '/' ? '/admin' : next); });
   }
 
   function viewRegister(q) {
-    const cid = api.activeClusterId();
-    const cl = R.cluster(cid);
+    const cl = R.cluster(CID);
     return `<div class="container page auth">
       <div class="panel auth-card wide">
         <h1>Tạo tài khoản</h1>
+        <p class="muted small">Chỉ cần email để đăng ký. Sinh viên, người đi làm và cư dân Hòa Lạc đều dùng được, không bắt buộc email trường.</p>
         <form id="regForm" class="form">
           <label>Họ và tên<input name="name" required></label>
           <div class="row2">
-            <label>Email <span class="small muted">(email .edu.vn được xác thực nhanh)</span><input name="email" type="email" required></label>
+            <label>Email<input name="email" type="email" required placeholder="ten@gmail.com"></label>
             <label>Mật khẩu<input name="password" type="password" minlength="6" required></label>
           </div>
-          <label>Chọn cụm giao dịch
-            <div class="cluster-choices">${R.clusters.map(c => `<label class="cluster-choice"><input type="radio" name="cluster" value="${c.id}" ${c.id === cid ? 'checked' : ''}><b>📍 ${c.name}</b><span>${c.tagline}</span></label>`).join('')}</div>
-          </label>
           <div class="row2">
-            <label>Trường<select name="school">${cl.schools.map(s => `<option>${esc(s)}</option>`).join('')}</select></label>
-            <label>Khu trọ / KTX<select name="area">${cl.areas.map(a => `<option value="${a.id}">${a.name}</option>`).join('')}</select></label>
+            <label>Trường / nhóm<select name="school">${cl.schools.map(s => `<option>${esc(s)}</option>`).join('')}</select></label>
+            <label>Khu trọ / KTX gần bạn<select name="area">${cl.areas.map(a => `<option value="${a.id}">${a.name}</option>`).join('')}</select></label>
           </div>
-          <label class="check"><input type="checkbox" required> Tôi đồng ý với quy định giao dịch an toàn và không đăng hàng cấm.</label>
+          <label class="check"><input type="checkbox" required> Tôi đồng ý với quy định cộng đồng: không đăng hàng cấm, mô tả trung thực, tự kiểm tra hàng khi giao dịch.</label>
           <button class="btn primary block">Đăng ký</button>
         </form>
         <p class="center small">Đã có tài khoản? <a href="#/login${qs({ next: q.next })}">Đăng nhập</a></p>
@@ -1688,17 +1386,42 @@
   }
   function mountRegister(q) {
     const f = document.getElementById('regForm');
-    f.querySelectorAll('input[name=cluster]').forEach(r => r.onchange = () => {
-      const cl = R.cluster(f.cluster.value);
-      f.school.innerHTML = cl.schools.map(s => `<option>${esc(s)}</option>`).join('');
-      f.area.innerHTML = cl.areas.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
-    });
     f.onsubmit = guard(e => {
       e.preventDefault();
-      api.register({ name: f.name.value, email: f.email.value, password: f.password.value, cluster: f.cluster.value, school: f.school.value, area: f.area.value });
-      toast('Tạo tài khoản thành công! Hãy xác thực sinh viên.', 'ok');
-      go(q.next || '/me?tab=account');
+      api.register({ name: f.name.value, email: f.email.value, password: f.password.value, school: f.school.value, area: f.area.value });
+      toast('Đã gửi mã xác thực tới email của bạn.', 'ok');
+      go('/verify' + qs({ next: q.next }));
     });
+  }
+
+  function viewVerify() {
+    const me = api.currentUser();
+    if (!me) return loginWall('Đăng nhập để xác thực email.');
+    if (me.emailVerified) return `<div class="container page narrow"><div class="empty big">✔<p>Email ${esc(me.email)} đã được xác thực.</p><a class="btn primary" href="#/post">Đăng tin</a></div></div>`;
+    return `<div class="container page auth">
+      <div class="panel auth-card">
+        <h1>✉ Xác thực email</h1>
+        <p class="muted">Mã xác thực đã được gửi tới <b>${esc(me.email)}</b>.</p>
+        <form id="verifyForm" class="form">
+          <label>Mã 6 số<input name="code" inputmode="numeric" maxlength="6" required placeholder="______"></label>
+          <button class="btn primary block">Xác thực</button>
+        </form>
+        <p class="center small"><button class="link-btn small" id="resend">Gửi lại mã</button></p>
+        <p class="small muted">Bản demo: mã luôn là <b>123456</b>.</p>
+      </div>
+    </div>`;
+  }
+  function mountVerify(q) {
+    const f = document.getElementById('verifyForm');
+    if (!f) return;
+    f.onsubmit = guard(e => {
+      e.preventDefault();
+      api.verifyEmail(f.code.value);
+      toast('Đã xác thực email ✔ Bạn có 2 tin đăng miễn phí.', 'ok');
+      go(q.next || '/post');
+    });
+    document.getElementById('resend').onclick = () => toast('Đã gửi lại mã (demo: 123456)');
+    f.code.focus();
   }
 
   // ---------- Khác ----------
@@ -1718,15 +1441,15 @@
     [/^\/search$/, q => [viewSearch(q), () => mountSearch(q)]],
     [/^\/item\/([\w-]+)$/, (q, id) => [viewItem(id), () => mountItem(id)]],
     [/^\/post$/, q => [viewPost(q), () => mountPost(q)]],
-    [/^\/moving$/, () => [viewMoving(), mountMoving]],
     [/^\/me$/, q => [viewMe(q), mountMe]],
+    [/^\/admin$/, q => [viewAdmin(q), mountAdmin]],
     [/^\/user\/([\w-]+)$/, (q, id) => [viewUser(id), () => bindContact($app)]],
     [/^\/chat(?:\/([\w-]+))?$/, (q, id) => [viewChat(id), () => mountChat(id)]],
     [/^\/pricing$/, q => [viewPricing(q), () => mountPricing(q)]],
     [/^\/notifications$/, q => [viewNotifications(q), mountNotifications]],
-    [/^\/reviews$/, q => [viewReviews(q), mountReviews]],
     [/^\/login$/, q => [viewLogin(q), () => mountLogin(q)]],
     [/^\/register$/, q => [viewRegister(q), () => mountRegister(q)]],
+    [/^\/verify$/, q => [viewVerify(q), () => mountVerify(q)]],
   ];
 
   let lastPath = null;
@@ -1734,7 +1457,7 @@
     const path = currentPath();
     const q = currentQuery();
     renderHeader();
-    renderSideAds(path === '/' || path === '/search' || path.startsWith('/item/') || path === '/moving' || path === '/pricing');
+    renderSideAds(path === '/' || path === '/search' || path.startsWith('/item/') || path === '/pricing');
     clearInterval(heroTimer);
     maps.forEach(m => m.remove());
     maps = [];

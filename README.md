@@ -1,6 +1,6 @@
-# ReMarket – Sàn đồ cũ sinh viên Hòa Lạc & Cầu Giấy
+# ReMarket – Giao dịch đồ cũ cộng đồng Hòa Lạc
 
-Frontend bản MVP theo `idea.docx`. Chưa có backend: dữ liệu mẫu nằm trong `js/data.js`, mọi thay đổi được lưu vào `localStorage` của trình duyệt.
+Frontend bản MVP theo báo cáo Checkpoint 4 (`cp4.docx`). Chưa có backend: dữ liệu mẫu nằm trong `js/data.js`, mọi thay đổi được lưu vào `localStorage` của trình duyệt.
 
 ## Chạy
 
@@ -13,39 +13,39 @@ python -m http.server 5500
 
 Tài khoản demo (mật khẩu `123456`), hoặc bấm đăng nhập nhanh trên trang Đăng nhập:
 
-| Email | Cụm | Ghi chú |
-|---|---|---|
-| minhanh@fpt.edu.vn | Hòa Lạc | Có sẵn tin đăng, tin đặt giữ, chat, giao dịch chờ đánh giá |
-| longpd@gmail.com | Hòa Lạc | Chưa xác thực sinh viên (thử luồng xác thực) |
-| namvh@vnu.edu.vn | Cầu Giấy | Đang thanh lý chuyển trọ |
+| Email | Vai trò trong demo |
+|---|---|
+| linhhm@fpt.edu.vn | Hoàng Mai Linh – sinh viên sắp ra trường, đang bán đồ (đã dùng hết 2 tin miễn phí tháng này) |
+| minhtd@gmail.com | Trần Đức Minh – tân sinh viên đi mua đồ |
+| hung.deal@gmail.com | Lê Văn Hùng – người bán đáng ngờ (tin iPad đòi đặt cọc) |
+| admin@remarket.vn | Quản trị viên – trang Kiểm duyệt `#/admin` |
+| minhanh@fpt.edu.vn | Nguyễn Minh Anh – có tin đã tự ẩn sau 30 ngày để demo gia hạn |
 
-Mã OTP / mã xác thực demo: `123456`. Link "Khôi phục dữ liệu mẫu" ở chân trang để reset.
+Mã xác thực email demo: `123456`. Link "Khôi phục dữ liệu mẫu" ở chân trang để reset.
 
-## Chức năng (MVP trong tài liệu)
+## Chức năng (phạm vi MVP trong cp4)
 
-- Đăng ký, đăng nhập, chọn cụm Hòa Lạc / Cầu Giấy; bảng tin ưu tiên tin nổi bật → cùng khu trọ → cùng trường → gần → mới.
-- Đăng tin chuẩn hóa: ảnh (tối đa 6), giá, tình trạng, thời gian sử dụng, trường, khu trọ; chọn **Bán / Trao đổi / Cho tặng**.
-- Tìm kiếm & lọc theo từ khóa, danh mục, hình thức, giá, trường, khu trọ, khoảng cách, tình trạng; sắp xếp.
-- Nhắn tin (có trả lời tự động giả lập), **đặt giữ** kèm điểm hẹn và thời hạn, **báo cáo** tin.
-- Cập nhật trạng thái đã giao dịch → hai bên **đánh giá** nhau.
-- Xác thực sinh viên (email .edu.vn hoặc ảnh thẻ) và số điện thoại.
-- **Thanh lý chuyển trọ**: đặt ngày chuyển đi, đăng theo **combo**, dịch vụ thanh lý phòng trọ, đối tác địa phương.
-- **Gói trả phí** (theo `ReMarket - Mô hình tài chính.xlsx`, thanh toán giả lập) – trang `#/pricing`:
-  - 2 tin miễn phí mỗi tháng, mua thêm **5.000đ / 2 tin**
-  - **Đẩy tin** 5.000đ/lượt (lên đầu mục Mới đăng)
-  - **Tin nổi bật** 10.000đ/3 ngày (ô lớn 2×2 trang chủ kèm SĐT người bán, ưu tiên tìm kiếm)
-  - **Gói đối tác cửa hàng** 300.000đ/tháng
-  - **Banner 2 bên** 200.000đ/tuần (giá đề xuất – chưa có trong file tài chính, sửa ở `pricing` trong `js/store.js`)
-- Trang chủ kiểu Chợ Tốt: banner xoay, Gợi ý gần bạn | Mới đăng 2 cột, banner quảng cáo 2 bên (màn hình ≥1540px).
-- **Bản đồ** khu Hòa Lạc (Thạch Hòa, Thạch Thất) / Cầu Giấy bằng Leaflet + OpenStreetMap (cần Internet).
-- **Thông báo** (`#/notifications`, chuông trên header) và trang **Đánh giá** (`#/reviews`).
+- **Tài khoản email**: đăng ký bằng email bất kỳ (không bắt buộc email trường), xác thực email trước khi đăng tin. Không xác thực sinh viên, không SMS OTP.
+- **Đăng tin**: Bán / Trao đổi / Cho tặng (giá tự thành 0đ); bắt buộc ảnh thật, giá, tình trạng, khu vực giao dịch; tin hiển thị ngay, kiểm duyệt sau.
+- **Tìm kiếm & lọc** theo từ khóa, danh mục, hình thức, giá, khu trọ/KTX, trường/nhóm, khoảng cách, tình trạng; bản đồ khu Hòa Lạc (Leaflet + Google Maps).
+- **Liên hệ**: nhắn tin trên web; số điện thoại chỉ hiện khi người bán tự chọn hiển thị.
+- **Trạng thái tin**: chỉ người bán đánh dấu Đã bán / Đã cho tặng / Đã trao đổi. Khi người mua hẹn gặp trong tin nhắn, hệ thống gửi lời nhắc cập nhật. Tin không cập nhật sau **30 ngày tự ẩn**, gia hạn miễn phí và không trừ lượt.
+- **Báo cáo & kiểm duyệt**: người dùng báo cáo tin; quản trị viên xử lý trong 24 giờ: ẩn và yêu cầu chỉnh sửa / gỡ tin / không vi phạm; hạn chế quyền đăng khi tái phạm.
+- **Dịch vụ trả phí** (cp4 mục 3.5), thanh toán chuyển khoản (mô phỏng):
+  - 2 tin miễn phí mỗi tháng; mua thêm **5.000đ / 2 tin**
+  - **Đẩy tin** 5.000đ/lượt
+  - **Tin ưu tiên** 10.000đ/3 ngày
+  - **Banner đối tác** 300.000đ/tháng/vị trí (tách khỏi danh mục tin C2C)
+  - Hoa hồng giao dịch: 0đ
+
+Không có trong MVP (theo cp4): đặt giữ, đánh giá người bán (lộ trình 2028), thanh lý trọn phòng / combo, gói cửa hàng bán trên sàn, cụm ngoài Hòa Lạc.
 
 ## Cấu trúc
 
 ```
 index.html      khung trang
 css/style.css   giao diện (responsive, có thanh điều hướng dưới trên mobile)
-js/data.js      dữ liệu mẫu: cụm, trường, khu trọ, danh mục, người dùng, tin, đánh giá, chat
+js/data.js      dữ liệu mẫu: khu vực Hòa Lạc, danh mục, người dùng, tin, báo cáo, tin nhắn
 js/store.js     lớp API giả (window.api) – nơi duy nhất đọc/ghi dữ liệu
 js/app.js       router theo hash (#/...) và các trang
 ```
@@ -53,5 +53,5 @@ js/app.js       router theo hash (#/...) và các trang
 ## Nối backend sau này
 
 Giao diện chỉ gọi `window.api`. Mỗi hàm trong `js/store.js` đã ghi chú endpoint REST tương ứng
-(`GET /listings`, `POST /listings/:id/reserve`, `POST /reviews`, ...). Khi có backend, thay thân các hàm này bằng `fetch()`
+(`GET /listings`, `POST /listings/:id/sold`, `POST /admin/reports/:id`, ...). Khi có backend, thay thân các hàm này bằng `fetch()`
 (nên chuyển sang `async` và thêm `await` ở chỗ gọi trong `app.js`).
