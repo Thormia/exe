@@ -133,6 +133,7 @@
         </form>
         <nav class="header-actions">
           ${admin ? '<a href="#/admin" class="hdr-link">🛡 Kiểm duyệt</a>' : ''}
+          <a href="#/cho-tang" class="hdr-link hide-sm">🎁 Cho tặng</a>
           <a href="#/pricing" class="hdr-link hide-sm">💎 Bảng giá</a>
           ${me ? `<div class="menu-wrap">
             <button class="icon-btn" id="bellBtn" title="Thông báo">🔔${unreadN ? `<span class="dot">${unreadN}</span>` : ''}</button>
@@ -313,7 +314,7 @@
     const near = api.searchListings({ sort: 'priority' }).slice(0, 6);
     const fresh = api.searchListings({ sort: 'new' }).slice(0, 6);
     const free = api.searchListings({ type: 'free', sort: 'near' }).slice(0, 4);
-    const all = api.searchListings({});
+    const all = api.searchListings({ includeFree: true });
 
     const slides = [
       ['s-green', `<h1>Đồ cũ ở <span class="hl">Hòa Lạc</span>,<br>tìm gần – bán nhanh – tặng dễ.</h1>
@@ -324,8 +325,8 @@
           <div><b>${st.users}</b><span>người dùng</span></div>
           <div><b>${st.done}</b><span>đã bán / cho tặng</span></div>
         </div>`],
-      ['s-orange', `<span class="slide-tag">Đăng tin</span><h2>${P.freePosts} tin đầu mỗi tháng miễn phí</h2>
-        <p class="lead">Cần đăng nhiều hơn? Chỉ <b>${money(P.extraPosts.price)} cho ${P.extraPosts.posts} tin</b>. ReMarket không thu hoa hồng trên giá món đồ.</p><a href="#/post" class="btn light">+ Đăng tin ngay</a>`],
+      ['s-orange', `<span class="slide-tag">Đăng tin</span><h2>Mỗi tài khoản có ${P.freePosts} tin miễn phí</h2>
+        <p class="lead">Tin cho tặng luôn miễn phí, không tính vào hạn mức. Cần bán thêm? Chỉ <b>${money(P.extraPosts.price)} cho ${P.extraPosts.posts} tin</b>. ReMarket không thu hoa hồng trên giá món đồ.</p><a href="#/post" class="btn light">+ Đăng tin ngay</a>`],
       ['s-purple', `<span class="slide-tag">Tin ưu tiên</span><h2>Hiển thị nổi bật chỉ ${money(P.featured.price)}/${P.featured.days} ngày</h2>
         <p class="lead">Lên ô lớn trang chủ và đầu kết quả tìm kiếm. Đẩy tin lên đầu mục Mới đăng chỉ ${money(P.bump.price)}/lượt.</p><a href="#/pricing" class="btn light">Xem bảng giá</a>`],
     ];
@@ -346,11 +347,11 @@
             <div class="small">${esc(me.school)} · ${esc(areaName(me.area))}</div>${emailBadge(me)}</div></div>
             ${!me.emailVerified ? '<a href="#/verify" class="notice warn">Xác thực email để bắt đầu đăng tin →</a>' : ''}
             ${api.isAdmin(me) ? `<a href="#/admin" class="btn primary block">🛡 Vào trang kiểm duyệt</a>` : `
-            <div class="small muted">📝 Còn <b>${q.freeLeft}/${P.freePosts}</b> tin miễn phí tháng này${q.credits ? ` · ${q.credits} lượt đã mua` : ''}</div>
+            <div class="small muted">📝 Tài khoản còn <b>${q.freeLeft}/${P.freePosts}</b> tin miễn phí${q.credits ? ` · ${q.credits} lượt đã mua` : ''} · cho tặng không tính</div>
             <a href="#/post" class="btn primary block">+ Đăng tin mới</a>
             <a href="#/me" class="btn ghost block">Quản lý tin của tôi</a>`}`
           : `<h3>Bắt đầu trong 1 phút</h3>
-            <ol class="steps-mini"><li>Đăng ký bằng email, không bắt buộc email trường</li><li>Xác thực email</li><li>Đăng ${P.freePosts} tin miễn phí mỗi tháng</li></ol>
+            <ol class="steps-mini"><li>Đăng ký bằng email, không bắt buộc email trường</li><li>Xác thực email</li><li>Đăng ${P.freePosts} tin bán miễn phí; cho tặng không giới hạn</li></ol>
             <a href="#/register" class="btn primary block">Tạo tài khoản</a>
             <a href="#/login" class="btn ghost block">Đăng nhập</a>`}
         </div>
@@ -358,7 +359,7 @@
 
       <section class="cats">
         ${R.categories.map(c => `<a href="#/search${qs({ cat: c.id })}" class="cat"><span class="cat-ic" style="background:${c.color[0]}">${c.icon}</span><span>${c.name}</span></a>`).join('')}
-        <a href="#/search${qs({ type: 'free' })}" class="cat"><span class="cat-ic" style="background:#d1fae5">🎁</span><span>Cho tặng</span></a>
+        <a href="#/cho-tang" class="cat"><span class="cat-ic" style="background:#d1fae5">🎁</span><span>Cho tặng</span></a>
         <a href="#/search${qs({ type: 'trade' })}" class="cat"><span class="cat-ic" style="background:#fef3c7">🔁</span><span>Trao đổi</span></a>
       </section>
 
@@ -400,7 +401,7 @@
       </section>
 
       ${free.length ? `<section class="section">
-        <div class="section-head"><h2>🎁 Cho tặng 0đ</h2><a href="#/search${qs({ type: 'free' })}">Xem tất cả →</a></div>
+        <div class="section-head"><h2>🎁 Cho tặng 0đ</h2><a href="#/cho-tang">Vào mục Cho tặng →</a></div>
         ${grid(free)}
       </section>` : ''}
 
@@ -446,7 +447,7 @@
     bindBuy($app);
 
     const cl = R.cluster(CID);
-    const map = mountMap(document.getElementById('homeMap'), api.searchListings({}));
+    const map = mountMap(document.getElementById('homeMap'), api.searchListings({ includeFree: true }));
     // Google Maps nhúng (iframe, không cần API key) — chỉ tải khi mở tab
     const gMap = document.getElementById('gMap');
     const gLink = document.getElementById('gMapLink');
@@ -475,7 +476,7 @@
   // ---------- Bảng giá & thanh toán ----------
   function pricingCards() {
     const items = [
-      ['📝', 'Mua thêm tin', money(P.extraPosts.price), `/ gói ${P.extraPosts.posts} tin`, `${P.freePosts} tin đầu mỗi tháng miễn phí. Hết lượt thì mua thêm theo gói.`, 'posts', 'Mua gói'],
+      ['📝', 'Mua thêm tin', money(P.extraPosts.price), `/ gói ${P.extraPosts.posts} tin`, `Mỗi tài khoản có ${P.freePosts} tin miễn phí; tin cho tặng không tính. Hết lượt thì mua thêm theo gói.`, 'posts', 'Mua gói'],
       ['🔝', 'Đẩy tin', money(P.bump.price), '/ lượt', 'Làm mới tin, đưa bài lên đầu mục “Mới đăng”.', 'bump', 'Chọn tin để đẩy'],
       ['⚡', 'Tin ưu tiên', money(P.featured.price), `/ ${P.featured.days} ngày`, 'Hiển thị nổi bật có thời hạn: ô lớn trang chủ và đầu kết quả tìm kiếm.', 'featured', 'Chọn tin'],
       ['🪧', 'Banner đối tác', money(P.banner.price), `/ ${P.banner.unit} / vị trí`, 'Dành cho cửa hàng, doanh nghiệp địa phương. Quảng cáo nằm riêng, không lẫn vào tin đồ cũ.', 'banner', 'Đặt banner'],
@@ -594,15 +595,16 @@
     return `<div class="container page">
       <div class="pricing-hero">
         <h1>💎 Bảng giá dịch vụ</h1>
-        <p class="muted">Người mua xem, tìm và liên hệ hoàn toàn miễn phí. Người bán có ${P.freePosts} tin miễn phí mỗi tháng; dịch vụ trả phí chỉ khi bạn cần đăng thêm hoặc tăng hiển thị.</p>
-        ${q && !api.isAdmin(me) ? `<div class="notice">📝 Tháng này bạn còn <b>${q.freeLeft}/${P.freePosts}</b> tin miễn phí · <b>${q.credits}</b> lượt đã mua · <a href="#/me?tab=payments">Lịch sử thanh toán</a></div>` : ''}
+        <p class="muted">Người mua xem, tìm và liên hệ hoàn toàn miễn phí. Mỗi tài khoản có ${P.freePosts} tin bán / trao đổi miễn phí; tin cho tặng luôn miễn phí. Dịch vụ trả phí chỉ khi bạn cần đăng thêm hoặc tăng hiển thị.</p>
+        ${q && !api.isAdmin(me) ? `<div class="notice">📝 Tài khoản còn <b>${q.freeLeft}/${P.freePosts}</b> tin miễn phí · <b>${q.credits}</b> lượt đã mua · <a href="#/me?tab=payments">Lịch sử thanh toán</a></div>` : ''}
       </div>
       ${pricingCards()}
       <section class="section panel">
         <h3>Toàn bộ bảng giá</h3>
         <table class="pay-table">
           <tr><th>Dịch vụ</th><th>Đơn giá / chính sách</th><th>Ghi chú</th></tr>
-          <tr><td>Đăng cơ bản</td><td>${P.freePosts} tin miễn phí / tài khoản / tháng</td><td>Sửa tin và gia hạn tin không tốn lượt</td></tr>
+          <tr><td>Đăng cơ bản</td><td>${P.freePosts} tin bán / trao đổi miễn phí / tài khoản</td><td>Sửa tin và gia hạn tin không tốn lượt</td></tr>
+          <tr><td>Tin cho tặng</td><td>Miễn phí, không giới hạn</td><td>Không tính vào hạn mức ${P.freePosts} tin</td></tr>
           <tr><td>Mua thêm tin</td><td>${money(P.extraPosts.price)} / gói ${P.extraPosts.posts} tin</td><td>Lượt đã mua không hết hạn</td></tr>
           <tr><td>Đẩy tin</td><td>${money(P.bump.price)} / lượt</td><td>Lên đầu mục “Mới đăng”</td></tr>
           <tr><td>Tin ưu tiên</td><td>${money(P.featured.price)} / ${P.featured.days} ngày</td><td>Hiển thị nổi bật có thời hạn</td></tr>
@@ -616,7 +618,7 @@
           <div class="btn-row"><button class="btn primary" data-buy="banner">Đặt banner</button></div>
         </div>
         <div class="panel"><h3>❓ Câu hỏi thường gặp</h3>
-          <p class="small"><b>Tin miễn phí tính thế nào?</b> Mỗi tài khoản được ${P.freePosts} tin mới mỗi tháng dương lịch. Sửa tin và gia hạn tin không tốn lượt.</p>
+          <p class="small"><b>Tin miễn phí tính thế nào?</b> Mỗi tài khoản được ${P.freePosts} tin bán hoặc trao đổi miễn phí. Tin cho tặng không tính vào hạn mức. Sửa tin và gia hạn tin không tốn lượt.</p>
           <p class="small"><b>Tin có hết hạn không?</b> Tin không được cập nhật sau ${R.listingDays} ngày sẽ tự ẩn. Bạn gia hạn miễn phí nếu món đồ vẫn còn.</p>
           <p class="small"><b>Thanh toán thế nào?</b> Chuyển khoản theo nội dung hướng dẫn; dịch vụ kích hoạt khi khoản thu được xác nhận.</p>
         </div>
@@ -626,6 +628,26 @@
   function mountPricing(q) {
     bindBuy($app);
     if (q.banner && requireLogin('Đăng nhập để đặt banner.')) openBannerForm(q.banner);
+  }
+
+  // ---------- Cho tặng (mục riêng) ----------
+  function viewFree(q) {
+    const cl = R.cluster(CID);
+    const ls = api.searchListings({ type: 'free', area: q.area, cat: q.cat, q: q.q, sort: 'near' });
+    const chip = (key, val, label) => `<a href="#/cho-tang${qs(Object.assign({}, q, { [key]: val }))}" class="chip ${(q[key] || '') === val ? 'on' : ''}">${label}</a>`;
+    return `<div class="container page">
+      <section class="panel">
+        <div class="results-head">
+          <div><h1>🎁 Cho tặng 0đ</h1>
+            <p class="muted">Đồ còn dùng được, người đăng cho tặng miễn phí. Tin cho tặng luôn miễn phí và không tính vào hạn mức ${P.freePosts} tin của tài khoản.</p></div>
+          <a href="#/post?type=free" class="btn primary">+ Đăng đồ cho tặng</a>
+        </div>
+        <div class="chips">${chip('area', '', 'Mọi khu vực')}${cl.areas.map(a => chip('area', a.id, '📍 ' + a.name)).join('')}</div>
+        <div class="chips" style="margin-top:8px">${chip('cat', '', 'Mọi danh mục')}${R.categories.map(c => chip('cat', c.id, c.icon + ' ' + c.name)).join('')}</div>
+      </section>
+      <div class="muted small sub">${ls.length} món đang cho tặng</div>
+      ${grid(ls, 'Chưa có món nào đang cho tặng ở khu vực này. <a href="#/post?type=free">Đăng đồ cho tặng</a>')}
+    </div>`;
   }
 
   // ---------- Thông báo ----------
@@ -649,6 +671,7 @@
 
   // ---------- Tìm kiếm ----------
   function viewSearch(q) {
+    if (q.type === 'free') { setTimeout(() => go('/cho-tang' + qs({ area: q.area, cat: q.cat })), 0); return ''; }
     const cl = R.cluster(CID);
     const rs = api.searchListings(q);
     const opt = (v, label, cur) => `<option value="${esc(v)}" ${String(cur || '') === String(v) ? 'selected' : ''}>${esc(label)}</option>`;
@@ -662,8 +685,9 @@
             <label>Từ khóa<input name="q" value="${esc(q.q || '')}" placeholder="VD: quạt"></label>
             <label>Hình thức
               <div class="seg">
-                ${[['', 'Tất cả'], ['sell', 'Bán'], ['trade', 'Đổi'], ['free', 'Tặng']].map(([v, t]) => `<label><input type="radio" name="type" value="${v}" ${(q.type || '') === v ? 'checked' : ''}><span>${t}</span></label>`).join('')}
+                ${[['', 'Tất cả'], ['sell', 'Bán'], ['trade', 'Trao đổi']].map(([v, t]) => `<label><input type="radio" name="type" value="${v}" ${(q.type || '') === v ? 'checked' : ''}><span>${t}</span></label>`).join('')}
               </div>
+              <a href="#/cho-tang" class="small">🎁 Đồ cho tặng nằm ở mục Cho tặng →</a>
             </label>
             <label>Danh mục<select name="cat">${opt('', 'Tất cả danh mục', q.cat)}${R.categories.map(c => opt(c.id, c.icon + ' ' + c.name, q.cat)).join('')}</select></label>
             <label>Khoảng giá (đ)
@@ -695,6 +719,7 @@
   }
   function mountSearch(q) {
     const f = document.getElementById('filterForm');
+    if (!f) return;
     const submit = () => {
       const d = Object.fromEntries(new FormData(f).entries());
       go('/search' + qs(d));
@@ -716,9 +741,10 @@
     const cat = R.category(l.cat);
     const mine = me && me.id === l.seller;
     if ((l.status === 'removed' || l.status === 'hidden') && !mine && !admin) return notFound('Tin này đã bị ẩn hoặc gỡ do vi phạm quy định cộng đồng.');
-    const similar = api.searchListings({ cat: l.cat, exclude: l.id }).slice(0, 4);
+    const isFree = l.type === 'free';
+    const similar = api.searchListings(isFree ? { type: 'free', exclude: l.id } : { cat: l.cat, exclude: l.id }).slice(0, 4);
     const imgs = l.images && l.images.length ? l.images : [null];
-    const sellerListings = api.searchListings({ seller: seller.id }).length;
+    const sellerListings = api.searchListings({ seller: seller.id, includeFree: true }).length;
 
     let statusNote = '';
     if (l.status === 'sold') statusNote = `<div class="notice">✔ ${doneLabel(l)} ${l.soldAt ? timeAgo(l.soldAt) : ''}.</div>`;
@@ -730,7 +756,7 @@
     if (mine) {
       if (l.status === 'available') actions = `<a href="#/post?edit=${l.id}" class="btn ghost">✏ Sửa tin</a>
         <button class="btn primary" data-act="sold">✔ ${doneLabel(l)}</button>
-        <button class="btn boost" data-act="boost">⚡ Đẩy tin / Tin ưu tiên</button>
+        ${isFree ? '' : '<button class="btn boost" data-act="boost">⚡ Đẩy tin / Tin ưu tiên</button>'}
         <button class="btn ghost" data-act="renew">↻ Gia hạn ${R.listingDays} ngày</button>`;
       else if (l.status === 'expired') actions = `<button class="btn primary" data-act="renew">↻ Gia hạn miễn phí</button><button class="btn ghost" data-act="sold">✔ ${doneLabel(l)}</button>`;
       else if (l.status === 'hidden') actions = `<a href="#/post?edit=${l.id}" class="btn primary">✏ Sửa tin để hiển thị lại</a>`;
@@ -740,7 +766,7 @@
     }
 
     return `<div class="container page">
-      <nav class="crumbs"><a href="#/">Trang chủ</a> › <a href="#/search${qs({ cat: l.cat })}">${cat.name}</a> › <span>${esc(l.title)}</span></nav>
+      <nav class="crumbs"><a href="#/">Trang chủ</a> › ${isFree ? '<a href="#/cho-tang">🎁 Cho tặng</a>' : `<a href="#/search${qs({ cat: l.cat })}">${cat.name}</a>`} › <span>${esc(l.title)}</span></nav>
       <div class="item-layout">
           <div class="gallery">
             <div class="gallery-main" id="galMain">${imgs[0] ? `<img src="${imgs[0]}" alt="">` : thumb(l, 'big')}</div>
@@ -805,7 +831,7 @@
         </aside>
       </div>
 
-      ${similar.length ? `<section class="section"><div class="section-head"><h2>Tin tương tự gần bạn</h2></div>${grid(similar)}</section>` : ''}
+      ${similar.length ? `<section class="section"><div class="section-head"><h2>${isFree ? 'Đồ cho tặng khác' : 'Tin tương tự gần bạn'}</h2></div>${grid(similar)}</section>` : ''}
     </div>`;
   }
   function mountItem(id) {
@@ -886,10 +912,11 @@
       <p class="muted">Tin hợp lệ được hiển thị ngay và kiểm duyệt sau. Ghi rõ tình trạng, lỗi nếu có và khu vực giao dịch để người mua không phải hỏi lại.</p>
       ${editing && editing.status === 'hidden' ? `<div class="notice warn">🚩 Tin đang bị ẩn: ${esc(editing.modNote)} Lưu thay đổi để hiển thị lại.</div>` : ''}
       ${editing ? '' : quotaBox()}
+      <div class="notice" id="freeNote" hidden>🎁 Tin cho tặng luôn miễn phí và không tính vào hạn mức ${P.freePosts} tin của tài khoản. Tin sẽ nằm ở mục <a href="#/cho-tang">Cho tặng</a>.</div>
       <form id="postForm" class="form panel">
         <label>Hình thức
           <div class="seg big">
-            ${[['sell', '💰 Bán'], ['trade', '🔁 Trao đổi'], ['free', '🎁 Cho tặng (0đ)']].map(([v, t]) => `<label><input type="radio" name="type" value="${v}" ${l.type === v ? 'checked' : ''}><span>${t}</span></label>`).join('')}
+            ${[['sell', '💰 Bán'], ['trade', '🔁 Trao đổi'], ['free', '🎁 Cho tặng (0đ)']].filter(([v]) => !editing || (v === 'free') === (l.type === 'free')).map(([v, t]) => `<label><input type="radio" name="type" value="${v}" ${l.type === v ? 'checked' : ''}><span>${t}</span></label>`).join('')}
           </div>
         </label>
 
@@ -932,7 +959,7 @@
     const q = api.quota();
     const ok = q.freeLeft || q.credits;
     return `<div class="quota ${ok ? '' : 'out'}" id="quotaBox">
-      <span>📝 Tháng này còn <b>${q.freeLeft}/${P.freePosts}</b> tin miễn phí · <b>${q.credits}</b> lượt đã mua${ok ? '' : ' — <b>cần mua thêm để đăng</b>'}</span>
+      <span>📝 Tài khoản còn <b>${q.freeLeft}/${P.freePosts}</b> tin bán / trao đổi miễn phí · <b>${q.credits}</b> lượt đã mua${ok ? '' : ' — <b>cần mua thêm để đăng tin bán</b>'}</span>
       <button type="button" class="btn small boost" id="buyPosts">+ Mua ${P.extraPosts.posts} tin – ${money(P.extraPosts.price)}</button>
     </div>`;
   }
@@ -961,13 +988,17 @@
     const applyType = () => {
       const t = f.type.value;
       f.querySelectorAll('[data-show]').forEach(el => { el.hidden = !el.dataset.show.split(' ').includes(t); });
+      // Hạn mức chỉ áp dụng cho tin bán / trao đổi
+      const box = document.getElementById('quotaBox');
+      if (box) box.hidden = t === 'free';
+      document.getElementById('freeNote').hidden = t !== 'free';
     };
     f.querySelectorAll('input[name=type]').forEach(r => r.onchange = applyType);
-    applyType();
 
     const refreshQuota = () => {
       const box = document.getElementById('quotaBox');
       if (box) { box.outerHTML = quotaBox(); document.getElementById('buyPosts').onclick = () => openBuyPosts(refreshQuota); }
+      applyType();
     };
     refreshQuota();
 
@@ -1028,7 +1059,7 @@
     if (!me) return loginWall('Đăng nhập để quản lý tin đăng.');
     const admin = api.isAdmin(me);
     const tab = admin ? 'account' : (q.tab || 'listings');
-    const mine = admin ? [] : api.searchListings({ seller: me.id, statuses: ['available', 'expired', 'hidden', 'removed', 'sold'], sort: 'new' });
+    const mine = admin ? [] : api.searchListings({ seller: me.id, statuses: ['available', 'expired', 'hidden', 'removed', 'sold'], sort: 'new', includeFree: true });
     const tabs = admin ? [['account', 'Tài khoản', 0]] : [['listings', 'Tin của tôi', mine.length], ['payments', 'Gói & thanh toán', 0], ['account', 'Tài khoản', 0]];
 
     let body = '';
@@ -1054,7 +1085,7 @@
                   ${(s === 'hidden' || s === 'removed') && l.modNote ? ` · Lý do: ${esc(l.modNote)}` : ''}</div>
               </div>
               <div class="row-actions">
-                ${s === 'available' ? `<a class="btn ghost small" href="#/post?edit=${l.id}">Sửa</a><button class="btn ghost small" data-renew="${l.id}">↻ Gia hạn</button><button class="btn boost small" data-boost="${l.id}">⚡ Đẩy</button><button class="btn primary small" data-sold="${l.id}">${doneLabel(l)}</button>` : ''}
+                ${s === 'available' ? `<a class="btn ghost small" href="#/post?edit=${l.id}">Sửa</a><button class="btn ghost small" data-renew="${l.id}">↻ Gia hạn</button>${l.type === 'free' ? '' : `<button class="btn boost small" data-boost="${l.id}">⚡ Đẩy</button>`}<button class="btn primary small" data-sold="${l.id}">${doneLabel(l)}</button>` : ''}
                 ${s === 'expired' ? `<button class="btn primary small" data-renew="${l.id}">↻ Gia hạn miễn phí</button><button class="btn ghost small" data-sold="${l.id}">${doneLabel(l)}</button>` : ''}
                 ${s === 'hidden' ? `<a class="btn primary small" href="#/post?edit=${l.id}">Sửa tin</a>` : ''}
                 ${s === 'sold' ? `<button class="btn ghost small" data-reopen="${l.id}">Mở bán lại</button>` : ''}
@@ -1067,7 +1098,7 @@
       const hot = mine.filter(l => l.boosted);
       body = `<div class="two-col">
         <div class="panel"><h3>📝 Lượt đăng tin</h3>
-          <div class="quota-big"><div><b>${qt.freeLeft}/${P.freePosts}</b><span>tin miễn phí còn lại tháng này</span></div><div><b>${qt.credits}</b><span>lượt đã mua</span></div></div>
+          <div class="quota-big"><div><b>${qt.freeLeft}/${P.freePosts}</b><span>tin miễn phí còn lại của tài khoản</span></div><div><b>${qt.credits}</b><span>lượt đã mua</span></div></div>
           <button class="btn boost block" id="buyPosts2">+ Mua ${P.extraPosts.posts} tin – ${money(P.extraPosts.price)}</button></div>
         <div class="panel"><h3>⚡ Tin đang ưu tiên</h3>
           ${hot.length ? hot.map(l => `<div class="mini-row"><a href="#/item/${l.id}" class="ellipsis">${esc(l.title)}</a><span class="badge b-boost">còn ${timeLeft(l.boostUntil)}</span></div>`).join('') : `<p class="muted small">Chưa có tin nào ưu tiên. Chỉ ${money(P.featured.price)}/${P.featured.days} ngày.</p>`}
@@ -1237,8 +1268,8 @@
   function viewUser(id) {
     const u = api.getUser(id);
     if (!u) return notFound('Không tìm thấy người dùng.');
-    const ls = api.searchListings({ seller: u.id, sort: 'new' });
-    const sold = api.searchListings({ seller: u.id, statuses: ['sold'] }).length;
+    const ls = api.searchListings({ seller: u.id, sort: 'new', includeFree: true });
+    const sold = api.searchListings({ seller: u.id, statuses: ['sold'], includeFree: true }).length;
     const me = api.currentUser();
     return `<div class="container page">
       <div class="profile-head panel">
@@ -1439,6 +1470,7 @@
   const routes = [
     [/^\/$/, () => [viewHome(), mountHome]],
     [/^\/search$/, q => [viewSearch(q), () => mountSearch(q)]],
+    [/^\/cho-tang$/, q => [viewFree(q), null]],
     [/^\/item\/([\w-]+)$/, (q, id) => [viewItem(id), () => mountItem(id)]],
     [/^\/post$/, q => [viewPost(q), () => mountPost(q)]],
     [/^\/me$/, q => [viewMe(q), mountMe]],
@@ -1457,7 +1489,7 @@
     const path = currentPath();
     const q = currentQuery();
     renderHeader();
-    renderSideAds(path === '/' || path === '/search' || path.startsWith('/item/') || path === '/pricing');
+    renderSideAds(path === '/' || path === '/search' || path === '/cho-tang' || path.startsWith('/item/') || path === '/pricing');
     clearInterval(heroTimer);
     maps.forEach(m => m.remove());
     maps = [];

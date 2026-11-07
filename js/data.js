@@ -144,7 +144,7 @@ window.MOCK = (function () {
     { id: 'n3', to: 'u1', kind: 'system', text: 'Tin “Giáo trình Toán rời rạc” đang được nhiều người xem. Đẩy tin chỉ 5.000đ/lượt để lên đầu mục Mới đăng.', link: '#/item/l4', at: now - 5 * H, read: false },
   ];
   users.forEach(u => {
-    if (u.role !== 'admin') notifications.push({ id: 'nw' + u.id, to: u.id, kind: 'system', text: 'Chào mừng bạn đến ReMarket! Mỗi tháng bạn có 2 tin đăng miễn phí.', link: '#/pricing', at: u.joinedAt, read: u.id === 'u1' });
+    if (u.role !== 'admin') notifications.push({ id: 'nw' + u.id, to: u.id, kind: 'system', text: 'Chào mừng bạn đến ReMarket! Tài khoản của bạn có 2 tin bán / trao đổi miễn phí; tin cho tặng luôn miễn phí và không tính vào hạn mức.', link: '#/pricing', at: u.joinedAt, read: u.id === 'u1' });
   });
 
   const payments = [
